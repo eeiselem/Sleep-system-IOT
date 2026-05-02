@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+.env
+.env.local
+instance/
+*.db
+.venv/
+venv/
+Final Project Proposal.pdf
+ESP32/secrets.h

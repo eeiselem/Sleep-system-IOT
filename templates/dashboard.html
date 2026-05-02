@@ -1,0 +1,3264 @@
+{% extends "base.html" %}
+
+{% block title %}Sleep · Studio{% endblock %}
+
+{% block head_extra %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked@14.1.4/marked.min.js"></script>
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    oura: {
+                        bg: '#0b0e11',
+                        surface: 'rgba(255,255,255,0.04)',
+                        gold: '#d4af37',
+                        mint: '#7ef2c5',
+                        rose: '#f43f5e',
+                    },
+                },
+                fontFamily: {
+                    sans: ['Inter', 'system-ui', 'sans-serif'],
+                },
+            },
+        },
+    };
+</script>
+<style>
+    @keyframes fan-spin-tw { to { transform: rotate(360deg); } }
+    body.dashboard-tw { background: #0b0e11 !important; color: #e4e4e7; }
+    body.dashboard-tw .nav-bar {
+        background: rgba(11, 14, 17, 0.72) !important;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    }
+    body.dashboard-tw .nav-bar a { color: #d4d4d8 !important; font-weight: 600; }
+    body.dashboard-tw .nav-bar a:hover { color: #d4af37 !important; }
+    body.dashboard-tw .content { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    @media (min-width: 640px) { body.dashboard-tw .content { padding: 1.5rem 1.25rem 2.5rem; } }
+    body.dashboard-tw h1, body.dashboard-tw h2, body.dashboard-tw h3 { color: inherit; }
+    .cfg-temp-range-optimal { transition: left 0.12s ease, width 0.12s ease, box-shadow 0.2s; }
+    body.dashboard-tw .sleep-chart-guide-on > canvas:first-of-type { opacity: 0.38; transition: opacity 0.25s linear; }
+    body.dashboard-tw .sleep-chart-guide-msg { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85); }
+    body.dashboard-tw .cfg-temp-range-draggable { cursor: grab; }
+    body.dashboard-tw .cfg-temp-range-dragging { cursor: grabbing; }
+
+    body.dashboard-tw #cfg-temp-range-track,
+    body.dashboard-tw #cfg-temp-range-optimal {
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    /* Morning review history (was body.oura-dashboard in oura-theme.css) */
+    body.dashboard-tw .morning-review-history-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    body.dashboard-tw .morning-review-history-card {
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+            0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+    body.dashboard-tw .morning-review-inline-icon {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+    }
+    body.dashboard-tw .morning-review-inline-icon svg {
+        width: 21px;
+        height: 21px;
+        color: rgba(212, 175, 55, 0.88);
+    }
+    body.dashboard-tw .morning-review-history-card svg.mr-rail-icon--battery {
+        color: rgba(167, 211, 196, 0.95);
+    }
+    body.dashboard-tw .morning-review-history-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 11px;
+    }
+    body.dashboard-tw .morning-review-history-head-text {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px 12px;
+        min-width: 0;
+    }
+    body.dashboard-tw .morning-review-history-stars {
+        font-size: 0.92rem;
+        color: rgba(244, 160, 41, 0.95);
+        letter-spacing: 2px;
+    }
+    body.dashboard-tw .morning-review-history-date {
+        font-size: 0.8rem;
+        color: #a1a1aa;
+        font-variant-numeric: tabular-nums;
+    }
+    body.dashboard-tw .morning-review-history-readiness {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin: 8px 0 4px;
+        padding-left: 2px;
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(167, 211, 196, 0.88);
+    }
+    body.dashboard-tw .morning-review-history-readiness.is-missing .morning-review-readiness-text {
+        opacity: 0.42;
+    }
+    body.dashboard-tw .morning-review-history-notes {
+        margin: 10px 0 0;
+        font-size: 0.84rem;
+        line-height: 1.45;
+        color: #d4d4d8;
+        white-space: pre-wrap;
+    }
+    body.dashboard-tw .morning-review-history-notes.is-empty {
+        font-style: italic;
+        color: #a1a1aa;
+    }
+    body.dashboard-tw .morning-review-history-empty {
+        font-size: 0.86rem;
+        color: #a1a1aa;
+        text-align: center;
+        padding: 20px 10px;
+        margin: 0;
+    }
+    body.dashboard-tw .morning-review-note-body.has-notes {
+        color: #d4d4d8;
+    }
+    body.dashboard-tw .morning-review-note-body.no-notes {
+        font-style: italic;
+        color: #a1a1aa;
+    }
+
+    body.dashboard-tw .dash-metric-tip {
+        position: relative;
+        display: inline-flex;
+        vertical-align: middle;
+        margin-left: 0.35rem;
+    }
+    body.dashboard-tw .dash-metric-tip__btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        margin: 0;
+        border: none;
+        background: transparent;
+        color: rgba(161, 161, 170, 0.88);
+        cursor: help;
+        border-radius: 9999px;
+        line-height: 0;
+    }
+    body.dashboard-tw .dash-metric-tip__btn:hover,
+    body.dashboard-tw .dash-metric-tip__btn:focus-visible {
+        color: #d4af37;
+        outline: none;
+    }
+    body.dashboard-tw .dash-metric-tip__btn svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+    }
+    body.dashboard-tw .dash-metric-tip__bubble {
+        position: absolute;
+        z-index: 60;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(276px, 72vw);
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 0.74rem;
+        font-weight: 500;
+        line-height: 1.4;
+        text-transform: none;
+        letter-spacing: normal;
+        font-style: normal;
+        color: #e4e4e7;
+        background: rgba(11, 14, 17, 0.97);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.14s ease, visibility 0.14s;
+    }
+    body.dashboard-tw .dash-metric-tip:hover .dash-metric-tip__bubble,
+    body.dashboard-tw .dash-metric-tip:focus-within .dash-metric-tip__bubble {
+        opacity: 1;
+        visibility: visible;
+    }
+</style>
+{% endblock %}
+
+{% block body_attr %}class="dashboard-tw min-h-screen bg-[#0b0e11] font-sans text-zinc-200 antialiased selection:bg-amber-500/25 selection:text-amber-50"{% endblock %}
+
+{% block content %}
+    {# Hide raw decode/encryption error strings in Current Conditions (SSR + JS mirror). #}
+    {%- macro display_live_metric(val) -%}
+        {%- if val is none -%}
+            N/A
+        {%- else -%}
+            {%- set s = val|string -%}
+            {%- set sl = s|lower -%}
+            {%- if 'error' in sl -%}
+                {%- if 'decod' in sl or 'padding' in sl or 'decrypt' in sl or 'base64' in sl %}Encrypting…{% else %}—{% endif %}
+            {%- else -%}
+                {{ val }}
+            {%- endif -%}
+        {%- endif -%}
+    {%- endmacro %}
+
+    {%- macro metric_info_tip(aria_label, explanation) -%}
+        <span class="dash-metric-tip" tabindex="-1">
+            <button type="button" class="dash-metric-tip__btn" aria-label="{{ aria_label }}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </button>
+            <span class="dash-metric-tip__bubble" role="tooltip">{{ explanation }}</span>
+        </span>
+    {%- endmacro %}
+
+<div class="mx-auto max-w-6xl space-y-4 pb-8 sm:space-y-6 sm:pb-12">
+    <section
+        class="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-transparent p-6 shadow-2xl backdrop-blur-xl sm:p-8"
+        aria-labelledby="oura-readiness-label"
+    >
+        <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(212,175,55,0.12),transparent_50%)]"></div>
+        <span id="oura-readiness-label" class="sr-only">Sleep readiness score</span>
+        <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Sleep readiness</span>
+        <div class="mt-2 text-6xl font-extrabold tracking-tight text-zinc-600 sm:text-7xl transition-all duration-300" id="oura-readiness-value" aria-live="polite">—</div>
+        <p class="mt-2 text-sm text-zinc-400" id="oura-readiness-sub">Syncing…</p>
+    </section>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 xl:gap-5">
+        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6">
+            <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Current Conditions</h2>
+            <p><strong>Clock:</strong> <span id="live-clock"></span></p>
+            <p><strong>Last Update:</strong> <span id="last-update"></span></p>
+            
+            <hr class="my-5 border-0 border-t border-white/10">
+            
+            <h1 class="mt-4 text-center text-5xl font-semibold tracking-tight text-zinc-100">
+                <span class="temp-val bg-gradient-to-br from-zinc-50 to-zinc-400 bg-clip-text text-transparent">{{ display_live_metric(current_temperature) }}</span><span class="text-zinc-500">°C</span>
+            </h1>
+            <p class="text-center text-sm text-zinc-500">
+                Humidity: <span class="hum-val text-zinc-300">{{ display_live_metric(current_humidity) }}</span>%
+            </p>
+
+            <dl class="mt-5 grid grid-cols-2 gap-x-3 gap-y-3 text-left text-sm sm:gap-x-4">
+                <div class="rounded-xl bg-black/20 px-3 py-2.5 ring-1 ring-inset ring-white/5">
+                    <dt class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Heart rate</dt>
+                    <dd class="mt-0.5 font-semibold tabular-nums text-zinc-200"><span id="live-heart-rate">{{ display_live_metric(current_heart_rate) }}</span><span class="text-zinc-500"> bpm</span></dd>
+                </div>
+                <div class="rounded-xl bg-black/20 px-3 py-2.5 ring-1 ring-inset ring-white/5">
+                    <dt class="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <span>SpO₂</span>
+                        {{ metric_info_tip('About SpO₂', 'SpO₂ is blood oxygen saturation. For healthy adults at rest, 95% or higher is typically normal; consistently lower values warrant medical attention.') }}
+                    </dt>
+                    <dd class="mt-0.5 font-semibold tabular-nums text-zinc-200"><span id="live-spo2">{{ display_live_metric(current_spo2) }}</span><span class="text-zinc-500"> %</span></dd>
+                </div>
+                <div class="rounded-xl bg-black/20 px-3 py-2.5 ring-1 ring-inset ring-white/5">
+                    <dt class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Ambient noise</dt>
+                    <dd class="mt-0.5 font-semibold tabular-nums text-zinc-200"><span id="live-ambient-noise">{{ display_live_metric(current_ambient_noise) }}</span><span class="text-zinc-500"> dB</span></dd>
+                </div>
+                <div class="rounded-xl bg-black/20 px-3 py-2.5 ring-1 ring-inset ring-white/5">
+                    <dt class="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <span>VOC / air quality</span>
+                        {{ metric_info_tip('About VOC', 'VOC stands for volatile organic compounds—gases that affect indoor air quality. This dashboard reports a device air-quality index derived from VOC-related sensing; higher often means poorer air freshness.') }}
+                    </dt>
+                    <dd class="mt-0.5 font-semibold tabular-nums text-zinc-200"><span id="live-voc">{{ display_live_metric(current_voc) }}</span></dd>
+                </div>
+                <div class="col-span-2 rounded-xl bg-black/20 px-3 py-2.5 ring-1 ring-inset ring-white/5">
+                    <dt class="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <span>Current lumens</span>
+                        {{ metric_info_tip('About room light', 'Mapped from the board light sensor field (ambient_light). Values are shown in lux—a measure of illuminance at the sensor (not total fixture lumens).') }}
+                    </dt>
+                    <dd class="mt-0.5 font-semibold tabular-nums text-zinc-200"><span id="live-lumens">{{ display_live_metric(current_ambient_light) }}</span><span class="text-zinc-500"> lx</span></dd>
+                </div>
+            </dl>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6">
+            <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Local Weather</h2>
+            <p class="mt-2.5 mb-1 text-[0.8rem] leading-snug text-zinc-400">
+                Search by City, Zipcode, or Lat, Long<br>
+                <span class="italic text-zinc-500">(Example: 40.7128, -74.0060)</span>
+            </p>
+            
+            <div class="mt-2 flex flex-wrap gap-2">
+                <input type="text" id="weather-city-input" placeholder="Enter location..." class="min-h-[44px] flex-1 rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-teal-400/40 sm:min-w-[12rem]">
+                <button type="button" onclick="searchWeather()" class="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">Search</button>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-4">
+                <img id="weather-icon" src="" alt="Weather Icon" class="hidden h-16 w-16 shrink-0 object-contain" width="64" height="64">
+                <div>
+                    <h3 id="weather-location" class="m-0 text-lg font-semibold text-zinc-100">Loading...</h3>
+                    <p id="weather-desc" class="mt-1 text-sm text-zinc-500"></p>
+                </div>
+            </div>
+            
+            <hr class="my-5 border-0 border-t border-white/10">
+            <p><strong>Temp:</strong> <span id="weather-temp">--</span>°C / <span id="weather-temp-f">--</span>°F</p>
+            <p><strong>Humidity:</strong> <span id="weather-hum">--</span>%</p>
+            <p class="mt-2.5 text-[0.8rem] text-zinc-500">
+                Last API Sync: <span id="weather-time">Waiting...</span>
+            </p>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6">
+            <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Configuration Panel</h2>
+            <p class="text-sm text-zinc-400">
+                Define sleep monitoring thresholds and wake targets for your account.
+            </p>
+
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label class="block shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500" for="cfg-temp-min">Temperature Range (°C)</label>
+                <div class="flex min-w-0 shrink-0 flex-wrap justify-start gap-2 sm:justify-end">
+                    <input type="number" id="cfg-temp-min" step="0.1" placeholder="Min" title="Minimum °C" class="min-h-[44px] w-[6.75rem] rounded-xl border-0 bg-black/35 px-3.5 py-2 text-right text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40 sm:w-[7.25rem]">
+                    <input type="number" id="cfg-temp-max" step="0.1" placeholder="Max" title="Maximum °C" class="min-h-[44px] w-[6.75rem] rounded-xl border-0 bg-black/35 px-3.5 py-2 text-right text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40 sm:w-[7.25rem]">
+                </div>
+            </div>
+
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label class="block shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500" for="cfg-noise-limit">Noise Limit (dB)</label>
+                <input type="number" id="cfg-noise-limit" step="0.1" placeholder="Max dB" title="Maximum overnight noise" class="min-h-[44px] w-full shrink-0 rounded-xl border-0 bg-black/35 px-3.5 py-2 text-right text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40 sm:ml-auto sm:w-[11rem]">
+            </div>
+
+            <label class="mt-4 block text-xs font-medium uppercase tracking-wide text-zinc-500" for="cfg-wake-time">Target wake time</label>
+            <p class="mt-1 text-[0.78rem] leading-snug text-zinc-500">Used for sunrise staging and countdown. Saved as the wake clock for your <strong class="font-medium text-zinc-400">next immediate sleep cycle</strong>; adjust any night before bed.</p>
+            <input type="time" id="cfg-wake-time" class="mt-2 min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40 sm:max-w-md">
+
+            <hr class="my-4 border-0 border-t border-white/10">
+            <label class="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">Comfort range (°F)</label>
+            <p class="mb-2 text-[0.78rem] text-zinc-500">
+                Full bar: absolute guardrails. Green band: optimal sleep temperature band.
+            </p>
+            <div class="flex flex-wrap gap-2">
+                <input type="number" id="cfg-guardrail-f-min" step="0.5" class="min-h-[44px] flex-1 rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40" placeholder="Min °F">
+                <input type="number" id="cfg-guardrail-f-max" step="0.5" class="min-h-[44px] flex-1 rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40" placeholder="Max °F">
+            </div>
+            <div id="cfg-temp-range-track" class="relative mt-4 h-11 overflow-hidden rounded-xl bg-black/40 ring-1 ring-inset ring-white/10">
+                <div id="cfg-temp-range-optimal" class="absolute inset-y-1 rounded-lg bg-gradient-to-r from-teal-400/35 via-oura-mint/30 to-amber-400/35 shadow-[0_0_24px_rgba(126,242,197,0.12)]"></div>
+            </div>
+            <div class="mt-2 flex justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                <span id="cfg-temp-range-label-low">60°F</span>
+                <span id="cfg-optimal-label" class="text-teal-300/90">Optimal —</span>
+                <span id="cfg-temp-range-label-high">75°F</span>
+            </div>
+            <label class="mt-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-400">
+                <input type="checkbox" id="cfg-override-optimal" class="h-4 w-4 rounded border-zinc-600 bg-black/40 text-amber-500 focus:ring-amber-500/40">
+                Override optimal band <span class="text-xs text-zinc-600">(drag green band sideways)</span>
+            </label>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button type="button" onclick="saveConfigPanel()" class="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">Save Config</button>
+                <button type="button" onclick="resetConfigPanel()" class="flex-1 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:brightness-110 active:scale-[0.98]">Reset</button>
+            </div>
+            <p id="config-status" class="mt-3 text-sm text-zinc-500">No saved configuration.</p>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6" id="morning-review-card">
+            <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Morning Review</h2>
+            <div class="flex gap-1 rounded-2xl bg-black/35 p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Morning review sections">
+                <button
+                    type="button"
+                    class="flex-1 rounded-xl py-2.5 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-100 shadow-inner ring-1 ring-amber-500/25 transition-all duration-200 bg-amber-500/15"
+                    role="tab"
+                    id="morning-review-tab-today-btn"
+                    aria-selected="true"
+                    aria-controls="morning-review-tab-today-panel"
+                >Today&apos;s review</button>
+                <button
+                    type="button"
+                    class="flex-1 rounded-xl py-2.5 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-all duration-200 hover:text-zinc-300"
+                    role="tab"
+                    id="morning-review-tab-history-btn"
+                    aria-selected="false"
+                    aria-controls="morning-review-tab-history-panel"
+                >History</button>
+            </div>
+
+            <div id="morning-review-tab-today-panel" class="morning-review-tab-panel" role="tabpanel" aria-labelledby="morning-review-tab-today-btn">
+            <p class="morning-review-lede mt-1 text-[0.85rem] text-zinc-400">
+                Subjective sleep quality for (<strong><span id="morning-review-session-label">…</span></strong>),
+                keyed to your wake-day (UTC session).
+            </p>
+
+            <div id="morning-review-loading" class="text-[0.88rem] text-zinc-400">Loading review status…</div>
+
+            <div id="morning-review-empty" class="hidden">
+                <form id="morning-review-form-new" class="flex flex-col gap-2">
+                    <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="morning-review-rating-new">Sleep quality (1–5 stars)</label>
+                    <select id="morning-review-rating-new" class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40" required>
+                        <option value="">Choose rating…</option>
+                        <option value="1">1 — Very poor</option>
+                        <option value="2">2 — Poor</option>
+                        <option value="3">3 — Fair</option>
+                        <option value="4">4 — Good</option>
+                        <option value="5">5 — Excellent</option>
+                    </select>
+                    <label class="mt-2 block text-xs font-medium uppercase tracking-wide text-zinc-500" for="morning-review-notes-new">Notes (optional)</label>
+                    <textarea
+                        id="morning-review-notes-new"
+                        class="min-h-[88px] w-full resize-y rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        rows="3"
+                        placeholder="Dreams, wake-ups, caffeine, stress, anything that affected sleep…"
+                    ></textarea>
+                    <button type="submit" class="mt-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">Submit review</button>
+                </form>
+            </div>
+
+            <div id="morning-review-summary" class="hidden">
+                <p class="mt-2 mb-1.5">
+                    <strong>Rating:</strong>
+                    <span id="morning-review-star-visual" aria-hidden="true"></span>
+                    <span id="morning-review-rating-num" class="ml-1.5"></span>
+                </p>
+                <p id="morning-review-note-display" class="morning-review-note-body whitespace-pre-wrap text-[0.88rem] text-zinc-400"></p>
+                <button type="button" id="morning-review-modify-btn" class="mt-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">
+                    Modify Rating
+                </button>
+            </div>
+
+            <div id="morning-review-edit" class="hidden">
+                <form id="morning-review-form-edit" class="flex flex-col gap-2">
+                    <input type="hidden" id="morning-review-session-date-edit" value="">
+                    <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="morning-review-rating-edit">Sleep quality (1–5 stars)</label>
+                    <select id="morning-review-rating-edit" class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40" required>
+                        <option value="1">1 — Very poor</option>
+                        <option value="2">2 — Poor</option>
+                        <option value="3">3 — Fair</option>
+                        <option value="4">4 — Good</option>
+                        <option value="5">5 — Excellent</option>
+                    </select>
+                    <label class="mt-2 block text-xs font-medium uppercase tracking-wide text-zinc-500" for="morning-review-notes-edit">Notes (optional)</label>
+                    <textarea
+                        id="morning-review-notes-edit"
+                        class="min-h-[88px] w-full resize-y rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+                        rows="3"
+                        placeholder="Optional…"
+                    ></textarea>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <button type="submit" class="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">Save changes</button>
+                        <button type="button" id="morning-review-cancel-btn" class="flex-1 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:brightness-110 active:scale-[0.98]">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            </div><!-- end today panel -->
+
+            <div id="morning-review-tab-history-panel" class="morning-review-tab-panel" role="tabpanel" aria-labelledby="morning-review-tab-history-btn" hidden>
+                <p class="morning-review-lede mt-1 text-[0.82rem] text-zinc-500/90">
+                    Your last seven wake days (UTC) with star ratings, notes, and scored readiness when a completed session matches that wake day.
+                </p>
+                <div id="morning-review-history-loading" class="hidden text-[0.86rem] text-zinc-400">Loading history…</div>
+                <div id="morning-review-history-list-wrap" class="morning-review-history-stack"></div>
+                <p id="morning-review-history-empty" class="morning-review-history-empty hidden"></p>
+            </div>
+
+            <p id="morning-review-status-msg" class="mt-2.5 text-[0.85rem] text-zinc-400"></p>
+        </div>
+
+        <div id="sunrise-card" class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-colors duration-300 ease-linear sm:p-6">
+            <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Sunrise Sequence</h2>
+            <p class="mt-0 text-[0.85rem] leading-relaxed text-zinc-400">
+                Visualizes backend-controlled ramp toward wake time. Use ranges below for demo staging; Run Demo plays a full ramp in <strong class="text-zinc-200">30 seconds</strong> (30-minute pacing).
+            </p>
+
+            <div
+                class="mt-2 grid grid-cols-2 gap-2"
+                aria-label="Sunrise demonstration ranges"
+            >
+                <label class="block text-[0.8rem] text-zinc-400">
+                    Lumens min
+                    <input type="number" id="sunrise-lumen-min" value="0" min="0" step="1" class="box-border mt-1 min-h-[40px] w-full rounded-xl border-0 bg-black/35 px-3 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+                </label>
+                <label class="block text-[0.8rem] text-zinc-400">
+                    Lumens max
+                    <input type="number" id="sunrise-lumen-max" value="500" min="0" step="1" class="box-border mt-1 min-h-[40px] w-full rounded-xl border-0 bg-black/35 px-3 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+                </label>
+                <label class="block text-[0.8rem] text-zinc-400">
+                    Kelvin min
+                    <input type="number" id="sunrise-kelvin-min" value="2000" min="1000" step="50" class="box-border mt-1 min-h-[40px] w-full rounded-xl border-0 bg-black/35 px-3 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+                </label>
+                <label class="block text-[0.8rem] text-zinc-400">
+                    Kelvin max
+                    <input type="number" id="sunrise-kelvin-max" value="6500" min="1000" step="50" class="box-border mt-1 min-h-[40px] w-full rounded-xl border-0 bg-black/35 px-3 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+                </label>
+            </div>
+
+            {% if current_user.is_authenticated and current_user.role == 'Admin' %}
+            <button type="button" id="sunrise-demo-btn" class="mt-3 w-full rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">
+                Run Demo
+            </button>
+            <div class="mt-4 border-t border-white/10 pt-4">
+                <p class="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Outbound API Payload</p>
+                <pre class="overflow-x-auto rounded-xl border border-white/[0.08] bg-black/55 p-3 text-[11px] leading-snug shadow-inner shadow-black/40 backdrop-blur-sm"><code id="outbound-payload-sunrise" class="font-mono text-teal-200/90">{{ '{}' }}</code></pre>
+                <p class="mt-2 text-[0.72rem] italic text-zinc-600">Note: Physical HVAC/Smart Bulb endpoints disconnected. System is successfully generating and broadcasting state intent.</p>
+            </div>
+            {% else %}
+            <p class="mt-3 text-[0.82rem] italic text-zinc-600">Administrator role required for the accelerated sunrise demo and outbound intent preview.</p>
+            {% endif %}
+
+            <div
+                id="sunrise-track"
+                class="relative mt-2 h-5 w-full overflow-hidden rounded-full bg-gradient-to-r from-[#1b263b] via-[#4a4e69] to-[#f4a261]"
+            >
+                <div
+                    id="sunrise-progress"
+                    class="absolute inset-y-0 left-0 w-0 bg-gradient-to-r from-[rgba(255,205,86,0.2)] to-[rgba(255,205,86,0.75)] transition-[width] duration-300 ease-out"
+                ></div>
+                <div
+                    id="sunrise-sun"
+                    class="absolute left-0 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffd166] shadow-[0_0_12px_rgba(255,209,102,0.8)] transition-[left] duration-300 ease-out"
+                ></div>
+            </div>
+
+            <p class="mt-2.5"><strong class="text-zinc-300">Status:</strong> <span id="sunrise-status">Loading...</span></p>
+            <p class="my-1"><strong class="text-zinc-300">Wake Time:</strong> <span id="sunrise-wake-time">--:--</span></p>
+            <p class="my-1"><strong class="text-zinc-300">Lumen:</strong> <span id="sunrise-lumen">--</span> lm</p>
+            <p class="my-1"><strong class="text-zinc-300">Color Temp:</strong> <span id="sunrise-color-temp">--</span> K</p>
+            <p class="my-1"><strong class="text-zinc-300">Minutes to Wake:</strong> <span id="sunrise-minutes">--</span></p>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6">
+            <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">System Intervention Status</h2>
+            <p class="mt-0 text-[0.85rem] leading-relaxed text-zinc-400">
+                Read-only panel: no manual controls. Cooling, heater, white noise, fan, and air-filtration/high-fan badges follow
+                <strong class="text-zinc-300"><code>simulated_hardware</code></strong> on <code class="text-amber-200/90">GET /api/simulated-room</code> (boolean fields only).
+            </p>
+
+            <div id="intervention-cooling-row" class="mb-2 flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5 ring-1 ring-white/5 transition-colors duration-300">
+                <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                    <span aria-hidden="true">❄️</span>Cooling
+                </span>
+                <span id="intervention-cooling-badge" class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">IDLE</span>
+            </div>
+            <div id="intervention-heater-row" class="mb-2 flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5 ring-1 ring-white/5 transition-colors duration-300">
+                <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                    <span aria-hidden="true">🔥</span>Heater
+                </span>
+                <span id="intervention-heater-badge" class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">IDLE</span>
+            </div>
+            <div id="intervention-white-noise-row" class="mb-2 flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5 ring-1 ring-white/5 transition-colors duration-300">
+                <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                    <span aria-hidden="true">🔊</span>White Noise
+                </span>
+                <span id="intervention-white-noise-badge" class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">IDLE</span>
+            </div>
+            <div id="intervention-fan-row" class="mb-2 flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5 ring-1 ring-white/5 transition-colors duration-300">
+                <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                    <span id="intervention-fan-icon" aria-hidden="true">🌀</span>
+                    Fan
+                </span>
+                <span id="intervention-fan-badge" class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">IDLE</span>
+            </div>
+            <div id="intervention-air-filtration-row" class="flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5 ring-1 ring-white/5 transition-colors duration-300">
+                <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                    <span aria-hidden="true">🌬️</span>
+                    Air Filtration / High Fan
+                </span>
+                <span id="intervention-air-filtration-badge" class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">IDLE</span>
+            </div>
+            <p id="intervention-status-footnote" class="mt-2.5 text-[0.82rem] text-zinc-500">
+                Waiting for <code class="text-amber-200/90">/api/simulated-room</code> …
+            </p>
+        </div>
+
+        <details class="group rounded-2xl border border-amber-500/20 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl open:border-amber-500/35 open:shadow-amber-500/10 sm:p-6" id="dev-simulation-panel">
+            <summary class="cursor-pointer list-none border-b border-transparent pb-0 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 [&::-webkit-details-marker]:hidden">
+                Simulation controls <span class="text-[0.72rem] font-medium normal-case tracking-normal text-zinc-600">(developer / demo)</span>
+            </summary>
+            <div class="pt-2.5">
+                <p class="mb-2.5 text-[0.82rem] leading-relaxed text-zinc-500">
+                    Force bad conditions so autonomous actuators show <strong class="text-zinc-300">ACTIVE</strong> immediately for presentations.
+                    No heater or loudspeaker required. Toggles require a signed-in administrator session.
+                </p>
+
+                {% if current_user.is_authenticated and current_user.role == 'Admin' %}
+                <label class="dev-sim-toggle-row my-2.5 flex items-center gap-2.5 text-[0.88rem] text-zinc-400">
+                    <input type="checkbox" id="dev-force-high-temp" autocomplete="off" class="h-4 w-4 shrink-0 rounded border-zinc-600 bg-black/40 text-amber-500 focus:ring-amber-500/40">
+                    <span>Force high temperature response (cooling + circulation fan)</span>
+                </label>
+                <label class="dev-sim-toggle-row my-2.5 flex items-center gap-2.5 text-[0.88rem] text-zinc-400">
+                    <input type="checkbox" id="dev-force-high-noise" autocomplete="off" class="h-4 w-4 shrink-0 rounded border-zinc-600 bg-black/40 text-amber-500 focus:ring-amber-500/40">
+                    <span>Force high ambient noise response (white noise masking + fan)</span>
+                </label>
+                <label class="dev-sim-toggle-row my-2.5 flex items-center gap-2.5 text-[0.88rem] text-zinc-400">
+                    <input type="checkbox" id="dev-force-low-temp" autocomplete="off" class="h-4 w-4 shrink-0 rounded border-zinc-600 bg-black/40 text-amber-500 focus:ring-amber-500/40">
+                    <span>Force low temperature (below guardrails → heater)</span>
+                </label>
+                <label class="dev-sim-toggle-row mb-3 mt-2.5 flex items-center gap-2.5 text-[0.88rem] text-zinc-400">
+                    <input type="checkbox" id="dev-force-voc-spike" autocomplete="off" class="h-4 w-4 shrink-0 rounded border-zinc-600 bg-black/40 text-amber-500 focus:ring-amber-500/40">
+                    <span>Force VOC / gas spike (hazardous air quality → air filtration + max fan)</span>
+                </label>
+                <p id="dev-simulation-status-msg" class="mb-4 text-[0.78rem] text-zinc-600"></p>
+                <div class="border-t border-white/10 pt-4">
+                    <p class="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Outbound API Payload</p>
+                    <pre class="overflow-x-auto rounded-xl border border-white/[0.08] bg-black/55 p-3 text-[11px] leading-snug shadow-inner shadow-black/40 backdrop-blur-sm"><code id="outbound-payload-simulation" class="font-mono text-teal-200/90">{{ '{}' }}</code></pre>
+                    <p class="mt-2 text-[0.72rem] italic text-zinc-600">Note: Physical HVAC/Smart Bulb endpoints disconnected. System is successfully generating and broadcasting state intent.</p>
+                </div>
+                {% else %}
+                <p class="text-[0.82rem] italic text-zinc-600">Administrator role required for simulation overrides.</p>
+                {% endif %}
+            </div>
+        </details>
+    </div>
+
+    <div class="col-span-full rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <h2 class="border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 sm:mb-0 sm:border-0 sm:pb-0">Environmental History — Sleep Sessions</h2>
+            <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+                <label class="flex min-w-[10rem] flex-col text-[10px] font-semibold uppercase tracking-wider text-zinc-500" for="sleep-history-mode">
+                    View mode
+                    <select id="sleep-history-mode" class="mt-1 min-h-[40px] min-w-[11rem] rounded-xl border-0 bg-black/35 px-3 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+                        <option value="single-night">Single Night View</option>
+                        <option value="weekly-trends">Weekly Trends</option>
+                    </select>
+                </label>
+                <label id="sleep-session-select-label" class="hidden min-w-[18rem] flex-col text-[10px] font-semibold uppercase tracking-wider text-zinc-500" for="sleep-session-select">
+                    Sleep session
+                    <select id="sleep-session-select" class="mt-1 min-h-[40px] w-full rounded-xl border-0 bg-black/35 px-3 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40 sm:min-w-[22rem]"></select>
+                </label>
+            </div>
+        </div>
+        <p class="mt-2 text-[0.82rem] leading-relaxed text-zinc-500">
+            Single night plots every reading between the state machine&apos;s sleep onset (ASLEEP) and wake (AWAKE); an active session extends to now.
+            SpO₂, HRV / PRV, ambient light (lux when provided), VOC / air-quality index, ambient noise (dB), heart rate, and movement share one synced time axis across pan and zoom.
+        </p>
+
+        <div id="sleep-single-night-wrap" class="hidden">
+            <div class="my-3 flex flex-wrap items-center gap-2">
+                <button type="button" id="sleep-night-reset-zoom" class="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">
+                    Reset Zoom
+                </button>
+                <span class="ml-0 text-[0.78rem] text-zinc-500 sm:ml-2">
+                    Drag to pan horizontally; scroll or pinch on the charts to zoom the time axis.
+                </span>
+            </div>
+            <p class="mt-6 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Overlay comparison (legend toggles lines)</p>
+            <p class="my-0.5 mb-2.5 text-[0.78rem] text-zinc-500/90">
+                Each coloured trace maps to its own nightly min→max scaled 0–100% so mismatched units (e.g. bpm vs dB vs lux) can be compared visually; hover for raw readings.
+            </p>
+            <div class="mb-3 flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                <span class="inline-flex items-center">SpO₂ {{ metric_info_tip('About SpO₂', 'SpO₂ is blood oxygen saturation. For healthy adults at rest, 95% or higher is typically normal; consistently lower values warrant medical attention.') }}</span>
+                <span class="inline-flex items-center">VOC {{ metric_info_tip('About VOC', 'VOC stands for volatile organic compounds—gases that affect indoor air quality. This dashboard reports a device air-quality index derived from VOC-related sensing; higher often means poorer air freshness.') }}</span>
+                <span class="inline-flex items-center">HRV / PRV {{ metric_info_tip('About HRV / PRV', 'HRV (heart rate variability) and PRV (pulse rate variability) describe beat-to-beat timing variation. Higher resting variability is often associated with recovery; trends are more useful than single-night absolutes.') }}</span>
+                <span class="inline-flex items-center">Gyro variance {{ metric_info_tip('About gyro variance', 'Gyro variance summarizes motion sensor jitter during the window—an indirect movement or restlessness signal during sleep. Higher values usually mean more movement.') }}</span>
+            </div>
+            <div class="sleep-chart-guide-on relative my-6 min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35 sm:h-[258px]" id="sleep-wrap-compare">
+                <canvas id="sleepChartCompare"></canvas>
+                <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                    Data will appear once Sleep Onset is detected.
+                </p>
+            </div>
+
+            <p class="mt-6 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Per-metric timelines</p>
+            <div class="mt-6 flex flex-col gap-6">
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-heart_rate">
+                    <canvas id="sleepChartHr"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+                <div class="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <span>SpO₂</span>
+                    {{ metric_info_tip('About SpO₂', 'SpO₂ is blood oxygen saturation. For healthy adults at rest, 95% or higher is typically normal; consistently lower values warrant medical attention.') }}
+                </div>
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-spo2">
+                    <canvas id="sleepChartSpo2"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+                <div class="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <span>HRV / PRV</span>
+                    {{ metric_info_tip('About HRV / PRV', 'HRV (heart rate variability) and PRV (pulse rate variability) describe beat-to-beat timing variation. Higher resting variability is often associated with recovery; trends are more useful than single-night absolutes.') }}
+                </div>
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-prv_ms">
+                    <canvas id="sleepChartPrv"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-ambient_light">
+                    <canvas id="sleepChartLight"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+                <div class="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <span>VOC / air quality</span>
+                    {{ metric_info_tip('About VOC', 'VOC stands for volatile organic compounds—gases that affect indoor air quality. This dashboard reports a device air-quality index derived from VOC-related sensing; higher often means poorer air freshness.') }}
+                </div>
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-voc">
+                    <canvas id="sleepChartVoc"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-ambient_noise">
+                    <canvas id="sleepChartNoise"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+                <div class="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <span>Gyro variance (movement)</span>
+                    {{ metric_info_tip('About gyro variance', 'Gyro variance summarizes motion sensor jitter during the window—an indirect movement or restlessness signal during sleep. Higher values usually mean more movement.') }}
+                </div>
+                <div class="sleep-chart-guide-on relative min-h-[250px] h-[250px] overflow-hidden rounded-xl border border-white/10 bg-black/35" id="sleep-wrap-gyro_variance">
+                    <canvas id="sleepChartGyro"></canvas>
+                    <p class="sleep-chart-guide-msg pointer-events-none absolute inset-x-2 bottom-4 m-0 flex min-h-[3rem] items-end justify-center text-center text-[0.73rem] leading-snug text-zinc-400">
+                        Data will appear once Sleep Onset is detected.
+                    </p>
+                </div>
+            </div>
+            <p id="sleep-single-night-status" class="mt-2.5 text-[0.85rem] text-zinc-400"></p>
+        </div>
+
+        <div id="sleep-weekly-wrap" class="hidden">
+            <div class="h-[260px] min-h-[220px] w-full rounded-xl border border-white/10 bg-black/35 p-2 sm:h-[280px]"><canvas id="sleepWeeklyChart"></canvas></div>
+            <p id="sleep-weekly-status" class="mt-2 text-[0.82rem] text-zinc-400"></p>
+        </div>
+    </div>
+
+    <div class="col-span-full mb-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-2xl transition-all duration-300 sm:p-6">
+        <h2 class="mb-4 border-b border-white/10 pb-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">System Event Log</h2>
+        <p class="my-2.5 mb-3 text-[0.82rem] leading-relaxed text-zinc-500">
+            Query stored sensor readings for threshold breaches. Choose <strong class="text-zinc-400">heart rate</strong>, <strong class="text-zinc-400">SpO₂</strong>,
+            <strong class="text-zinc-400">ambient noise</strong>, <strong class="text-zinc-400">VOC / gas</strong>, or <strong class="text-zinc-400">gyro variance</strong>, set a threshold, and
+            <strong class="text-zinc-400">Above</strong> or <strong class="text-zinc-400">Below</strong>. The table lists the <strong class="text-zinc-400">exact sample timestamps</strong> (UTC)
+            where the stored value crossed your rule (server cap 1200 rows). Optional local start/end narrow the window; if both are
+            empty, the server uses the <strong class="text-zinc-400">last 7 UTC days</strong>.
+        </p>
+
+        {% if event_log_error %}
+        <div class="mb-4 rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+            {{ event_log_error }}
+        </div>
+        {% endif %}
+
+        <form id="event-log-search-form" action="/submit-event-log-search" method="post" class="flex flex-col gap-3">
+            <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="evt-start">Start (optional, local)</label>
+            <input type="datetime-local" id="evt-start" name="start_time" value="{{ session.get('start_datetime') or '' }}" class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+
+            <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="evt-end">End (optional, local)</label>
+            <input type="datetime-local" id="evt-end" name="end_time" value="{{ session.get('end_datetime') or '' }}" class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+
+            <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="evt-metric">Metric</label>
+            <select id="evt-metric" name="metric" class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40" required>
+                <option value="" disabled {% if not (session.get('event_metric') or '').strip() %}selected{% endif %}>Select metric…</option>
+                {% for mk, lbl in event_log_breach_labels.items() %}
+                <option value="{{ mk }}" {% if (session.get('event_metric') or '') == mk %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+            </select>
+
+            <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="evt-threshold">Threshold</label>
+            <input
+                type="number"
+                id="evt-threshold"
+                name="threshold"
+                step="any"
+                required
+                value="{{ session.get('event_threshold') or '' }}"
+                placeholder="e.g. 180 (heart rate), 92 (SpO₂ %), 50 (noise dB)"
+                class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+            >
+
+            <label class="block text-xs font-medium uppercase tracking-wide text-zinc-500" for="evt-direction">Comparison</label>
+            <select id="evt-direction" name="direction" class="min-h-[44px] w-full rounded-xl border-0 bg-black/35 px-3.5 py-2 text-sm text-zinc-100 ring-1 ring-inset ring-white/10 focus:outline-none focus:ring-2 focus:ring-teal-400/40">
+                <option value="above" {% if (session.get('event_direction') or 'below') == 'above' %}selected{% endif %}>Above (&gt;)</option>
+                <option value="below" {% if (session.get('event_direction') or 'below') != 'above' %}selected{% endif %}>Below (&lt;)</option>
+            </select>
+        </form>
+
+        <form id="event-log-clear-form" action="/clear-event-log-search" method="post"></form>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+            <button type="submit" form="event-log-search-form" class="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-2.5 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/25 transition hover:brightness-110 active:scale-[0.98]">Search breaches</button>
+            <button type="submit" form="event-log-clear-form" class="flex-1 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:brightness-110 active:scale-[0.98]">Clear</button>
+        </div>
+
+        {% if breach_table_rows is not none %}
+        <hr class="my-6 border-0 border-t border-white/10">
+        <h3 class="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Breach timestamps</h3>
+
+        {% if event_log_summary %}
+        <div class="mb-4 rounded-xl border border-teal-500/25 bg-teal-950/30 px-4 py-3 text-sm text-teal-100/95">{{ event_log_summary }}</div>
+        {% endif %}
+
+        {% if breach_table_rows|length > 0 %}
+        <div class="max-h-[28rem] overflow-auto rounded-xl border border-white/10 shadow-inner shadow-black/50">
+            <table class="w-full border-collapse text-left text-sm">
+                <thead>
+                    <tr class="sticky top-0 z-10 border-b border-white/10 bg-zinc-950/95 backdrop-blur-sm">
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Row ID</th>
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Timestamp</th>
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Observed value{% if event_metric_highlight %} — {{ event_log_breach_labels[event_metric_highlight] }}{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody class="text-zinc-300">
+                    {% for row in breach_table_rows %}
+                    <tr class="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors duration-150">
+                        <td class="px-3 py-2.5 align-top tabular-nums text-zinc-500">{{ row.id }}</td>
+                        <td class="px-3 py-2.5 align-top">
+                            <span class="utc-table-time tabular-nums text-zinc-400">
+                                {% if row.timestamp %}
+                                    {{ row.timestamp.isoformat() }}Z
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="px-3 py-2.5 align-top font-semibold text-teal-300">{{ row.value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-2.5 text-[0.78rem] text-zinc-500">
+            {{ breach_table_rows|length }} matching sample(s). Values are decrypted on read like the dashboard tiles.
+        </p>
+        {% else %}
+        <p class="py-6 text-center text-sm text-zinc-500">
+            No samples matched this rule in the chosen window.
+        </p>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<!-- Sleep Coach: floating assistant (Tailwind glassmorphism) -->
+<div
+    id="sleep-coach-stack"
+    class="pointer-events-none fixed bottom-6 right-4 z-[100] flex w-[calc(100%-2rem)] max-w-[400px] flex-col items-end gap-3 sm:right-6"
+    aria-live="polite"
+>
+    <div
+        id="sleep-coach-panel"
+        class="pointer-events-auto hidden flex h-[min(72vh,28rem)] w-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-black/55 shadow-2xl shadow-black/60 backdrop-blur-xl ring-1 ring-white/[0.06]"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="sleep-coach-title"
+    >
+        <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <h2 id="sleep-coach-title" class="m-0 text-sm font-semibold tracking-wide text-zinc-100">
+                Sleep Coach AI
+            </h2>
+            <button
+                id="sleep-coach-close"
+                type="button"
+                class="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/10 hover:text-zinc-200"
+                aria-label="Close Sleep Coach"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div
+            id="sleep-coach-messages"
+            class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-3 py-3 touch-pan-y"
+        ></div>
+        <div class="border-t border-white/10 bg-black/30 p-3 backdrop-blur-sm">
+            <div class="flex gap-2">
+                <label class="sr-only" for="sleep-coach-input">Message Sleep Coach</label>
+                <input
+                    id="sleep-coach-input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Ask about sleep, room data…"
+                    class="min-h-[44px] min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 ring-0 focus:border-teal-400/40 focus:outline-none focus:ring-2 focus:ring-teal-400/25"
+                />
+                <button
+                    id="sleep-coach-send"
+                    type="button"
+                    class="shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-[#0b0e11] shadow-lg shadow-amber-500/20 transition hover:brightness-110 active:scale-[0.98]"
+                >
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+    <button
+        id="sleep-coach-fab"
+        type="button"
+        class="pointer-events-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-gray-700 bg-black/50 text-teal-300 shadow-xl shadow-black/40 backdrop-blur-md transition hover:border-teal-400/40 hover:text-amber-200 focus:outline-none focus:ring-2 focus:ring-teal-400/35"
+        aria-label="Open Sleep Coach"
+        aria-expanded="false"
+        aria-controls="sleep-coach-panel"
+    >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 9l-2 2 2 2" opacity=".75"/>
+        </svg>
+    </button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+    // chartjs-plugin-zoom UMD attaches ChartZoom globally; Chart.js v4 requires explicit registration.
+    if (typeof Chart !== 'undefined') {
+        const tickSoft = 'rgba(255, 255, 255, 0.42)';
+        Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+        Chart.defaults.color = tickSoft;
+        Chart.defaults.borderColor = 'transparent';
+        Chart.defaults.plugins = Chart.defaults.plugins || {};
+        Chart.defaults.plugins.legend = Chart.defaults.plugins.legend || {};
+        Chart.defaults.plugins.legend.labels = Object.assign({}, Chart.defaults.plugins.legend.labels, {
+            color: 'rgba(212, 175, 55, 0.88)',
+            usePointStyle: true,
+            boxWidth: 8,
+            padding: 14,
+        });
+        Chart.defaults.plugins.tooltip = Object.assign({}, Chart.defaults.plugins.tooltip, {
+            backgroundColor: 'rgba(11, 14, 17, 0.94)',
+            titleColor: '#d4af37',
+            bodyColor: '#e4e4e7',
+            borderColor: 'rgba(126, 242, 197, 0.2)',
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 10,
+        });
+    }
+    if (typeof Chart !== 'undefined' && typeof ChartZoom !== 'undefined') {
+        Chart.register(ChartZoom);
+    }
+</script>
+
+<script>
+    function parseUtcTimestamp(timestampStr) {
+        if (!timestampStr) return null;
+        const trimmed = String(timestampStr).trim();
+        if (!trimmed) return null;
+
+        // If server provides naive timestamp, treat it as UTC.
+        if (
+            !trimmed.endsWith('Z') &&
+            !/[+-]\d{2}:\d{2}$/.test(trimmed)
+        ) {
+            return new Date(`${trimmed}Z`);
+        }
+        return new Date(trimmed);
+    }
+
+    // Setup live clock
+    setInterval(() => {
+        document.getElementById('live-clock').innerText = new Date().toLocaleTimeString();
+    }, 1000);
+
+    // initial update time
+    const dbTimestamp = "{{ current_timestamp_utc if current_timestamp_utc else '' }}";
+    const localDate = parseUtcTimestamp(dbTimestamp);
+    document.getElementById('last-update').innerText = localDate
+        ? localDate.toLocaleTimeString()
+        : "No Data Yet";
+
+    /** Sleep-session charts (single night + weekly trends) */
+    let weeklyTrendsChart = null;
+    let sleepNightCharts = [];
+
+    let lastSeenTimeMs = localDate ? localDate.getTime() : 0;
+
+    /** Latest `/api/simulated-room` sunrise block; drives wake-time fallback when the time input is empty. */
+    let lastSunriseSequence = null;
+
+    let sunriseDemoActive = false;
+    let sunriseDemoRafId = null;
+
+    /**
+     * Minutes until the next occurrence of HH:MM (24h clock) today in local time, else tomorrow if past.
+     */
+    function computeMinutesToWakeFromWakeClockHm(wakeHM) {
+        if (!wakeHM || typeof wakeHM !== 'string') return null;
+        const trimmed = wakeHM.trim();
+        const parts = trimmed.split(':');
+        if (parts.length < 2) return null;
+        const h = parseInt(parts[0], 10);
+        const mm = parseInt(parts[1], 10);
+        if (!Number.isFinite(h) || !Number.isFinite(mm) || h < 0 || h > 23 || mm < 0 || mm > 59) {
+            return null;
+        }
+        const now = new Date();
+        const wakeTarget = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, mm, 0, 0);
+        let deltaMs = wakeTarget.getTime() - Date.now();
+        if (deltaMs < 0) deltaMs += 86400000;
+        return deltaMs / 60000;
+    }
+
+    /** Same wake-clock source as Minutes-to-Wake display (config input → API wake_time). */
+    function getUnifiedMinutesToWake() {
+        const wakeEl = document.getElementById('cfg-wake-time');
+        let wakeHM = wakeEl && wakeEl.value ? String(wakeEl.value).trim() : '';
+        if (!wakeHM && lastSunriseSequence && lastSunriseSequence.wake_time) {
+            wakeHM = String(lastSunriseSequence.wake_time).trim();
+        }
+        return computeMinutesToWakeFromWakeClockHm(wakeHM);
+    }
+
+    function updateMinutesToWakeDisplay() {
+        if (sunriseDemoActive) return;
+
+        const minEl = document.getElementById('sunrise-minutes');
+        const mins = getUnifiedMinutesToWake();
+        if (minEl) minEl.innerText = mins !== null ? mins.toFixed(1) : '—';
+    }
+
+    /**
+     * Real-time smart-bulb prelude for the next 30 local minutes before wake:
+     * background #000 → daylight via lumen/Kelvin map; lumens forced to 0 when >30 min out.
+     */
+    function applyLocalSunrisePreludeFromMinutes(mins) {
+        if (!Number.isFinite(mins)) return;
+
+        const { kLo } = getSunriseRanges();
+
+        if (mins > 30) {
+            applySunriseVisual(0, 0, kLo);
+            const st = document.getElementById('sunrise-status');
+            if (st) {
+                st.innerText =
+                    '>30 min to wake · bulb off (#000)';
+            }
+            return;
+        }
+
+        const progressDecimal = mins <= 0 ? 1 : (30 - mins) / 30;
+        const progressPct = Math.min(Math.max(progressDecimal * 100, 0), 100);
+        const { lumen, kelvin } = mapProgressToLumenKelvin(progressPct);
+        applySunriseVisual(progressPct, lumen, kelvin);
+
+        const st = document.getElementById('sunrise-status');
+        if (st) {
+            if (mins <= 0) {
+                st.innerText =
+                    `Wake · daylight cue (${progressPct.toFixed(1)}% ramp)`;
+            } else {
+                st.innerText =
+                    `Sunrise prelude (${progressPct.toFixed(1)}% · ${mins.toFixed(1)} min to wake)`;
+            }
+        }
+    }
+
+    function tickSunriseRealtimePrelude() {
+        if (sunriseDemoActive) return;
+        updateMinutesToWakeDisplay();
+        const mins = getUnifiedMinutesToWake();
+        if (mins !== null && Number.isFinite(mins)) {
+            applyLocalSunrisePreludeFromMinutes(mins);
+        }
+    }
+
+    /** Display values from `/api/latest-readings` (matches Reading model fields). */
+    function formatLiveReadingMetric(val, unitSuffix) {
+        if (val === null || val === undefined || val === 'N/A') return 'N/A';
+        const s = String(val).trim();
+        if (!s || s.toUpperCase() === 'N/A') return 'N/A';
+        if (/error/i.test(s)) {
+            const sl = s.toLowerCase();
+            if (
+                sl.includes('decod')
+                || sl.includes('padding')
+                || sl.includes('decrypt')
+                || sl.includes('base64')
+            ) {
+                return 'Encrypting…';
+            }
+            return '—';
+        }
+        const n = Number(s);
+        if (!Number.isFinite(n)) return s;
+        if (unitSuffix === '%' || unitSuffix === 'bpm') {
+            return Number.isInteger(n) ? String(Math.round(n)) : String(Number(n.toFixed(1)));
+        }
+        return Number.isInteger(n) ? String(Math.round(n)) : String(Number(n.toFixed(2)));
+    }
+
+    function setLiveReadingsNoDataState() {
+        document.querySelector('.temp-val').innerText = 'N/A';
+        document.querySelector('.hum-val').innerText = 'N/A';
+        ['live-heart-rate', 'live-spo2', 'live-ambient-noise', 'live-voc', 'live-lumens'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = 'N/A';
+        });
+        document.getElementById('last-update').innerText = 'No Data Yet';
+    }
+
+    function destroySleepNightCharts() {
+        sleepNightCharts.forEach((c) => {
+            try {
+                c.destroy();
+            } catch (e) { /* noop */ }
+        });
+        sleepNightCharts = [];
+    }
+
+    async function loadSleepSessionsIntoSelectAndPreserveSelection() {
+        const sel = document.getElementById('sleep-session-select');
+        if (!sel) return;
+        const previous = sel.value;
+        const res = await fetch('/api/sleep-session/list');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        const sessions = data.sessions || [];
+        sel.innerHTML = '';
+        sessions.forEach((s) => {
+            const opt = document.createElement('option');
+            opt.value = String(s.id);
+            const badge = s.fsm_active ? ' · live ASLEEP'
+                : s.ongoing ? ' · in progress'
+                : '';
+            opt.textContent = `Session ${s.id} · wake-day ${s.wake_date_utc} UTC${badge}`;
+            sel.appendChild(opt);
+        });
+        const ids = new Set(sessions.map((s) => String(s.id)));
+        if (previous && ids.has(previous)) sel.value = previous;
+    }
+
+    function syncNightChartsXAxis(sourceChart) {
+        const x = sourceChart.scales.x;
+        if (x.min === undefined || x.max === undefined) return;
+        sleepNightCharts.forEach((c) => {
+            if (c === sourceChart) return;
+            c.options.scales.x.min = x.min;
+            c.options.scales.x.max = x.max;
+            c.update('none');
+        });
+    }
+
+    function attachSleepNightAxisSync(charts) {
+        charts.forEach((chart) => {
+            const z = chart.options.plugins.zoom;
+            if (!z) return;
+            z.pan.onPanComplete = ({ chart: ch }) => syncNightChartsXAxis(ch);
+            z.zoom.onZoomComplete = ({ chart: ch }) => syncNightChartsXAxis(ch);
+        });
+    }
+
+    function mapNightPoints(rows, key) {
+        return rows.map((p) => {
+            const t = parseUtcTimestamp(p.t);
+            const xv = t && !Number.isNaN(t.getTime()) ? t.getTime() : null;
+            const raw = p[key];
+            let y = null;
+            if (raw !== null && raw !== undefined && raw !== '') {
+                const num = Number(raw);
+                if (Number.isFinite(num)) {
+                    y = num;
+                }
+            }
+            return { x: xv, y };
+        }).filter((pt) => pt.x !== null);
+    }
+
+    var SLEEP_ONSET_GUIDE_MSG = 'Data will appear once Sleep Onset is detected.';
+    var SLEEP_METRIC_GAP_MSG = 'No samples for this metric in this session window.';
+
+    function setSleepChartGuide(wrapId, active, message) {
+        var wrap = document.getElementById(wrapId);
+        if (!wrap) return;
+        var cap = wrap.querySelector('.sleep-chart-guide-msg');
+        wrap.classList.toggle('sleep-chart-guide-on', !!active);
+        if (!cap) return;
+        if (active) {
+            cap.textContent = message || SLEEP_ONSET_GUIDE_MSG;
+        } else {
+            cap.textContent = '';
+        }
+    }
+
+    function nightFiniteCount(rows, key) {
+        var n = 0;
+        for (var i = 0; i < rows.length; i++) {
+            var raw = rows[i][key];
+            if (raw === null || raw === undefined || raw === '') continue;
+            var num = Number(raw);
+            if (Number.isFinite(num)) n++;
+        }
+        return n;
+    }
+
+    /** Map each xy point to nightly min/max → 0–100 for overlays; attaches .raw numeric for tooltips */
+    function normalizeSeriesWithRaw(xyPts) {
+        var fin = xyPts.filter(function (p) { return Number.isFinite(p.y); });
+        if (!fin.length) return xyPts.map(function (p) { return { x: p.x, y: null, raw: null }; });
+        var ys = fin.map(function (p) { return p.y; });
+        var lo = Math.min.apply(null, ys);
+        var hi = Math.max.apply(null, ys);
+        var span = hi - lo;
+        return xyPts.map(function (p) {
+            if (!Number.isFinite(p.y)) return { x: p.x, y: null, raw: null };
+            var norm = span < 1e-9 ? 50 : ((p.y - lo) / span) * 100;
+            return { x: p.x, y: +norm.toFixed(2), raw: +p.y };
+        });
+    }
+
+    function ghostSinMetricPoints(tMin, tMax, yLo, yHi, phase, steps) {
+        var out = [];
+        var span = tMax - tMin;
+        var amp = ((yHi - yLo) / 2) * 0.75;
+        var mid = (yHi + yLo) / 2;
+        var n = typeof steps === 'number' ? steps : 54;
+        for (var i = 0; i <= n; i++) {
+            var u = i / n;
+            var t = tMin + span * u;
+            var w = Math.sin(u * Math.PI * 2 + phase) * amp + mid;
+            out.push({ x: t, y: +w.toFixed(2) });
+        }
+        return out;
+    }
+
+    function ghostNormalizedComparePoints(tMin, tMax, phase, steps) {
+        var pts = ghostSinMetricPoints(tMin, tMax, 32, 88, phase, steps);
+        return pts.map(function (p) {
+            return { x: p.x, y: p.y, raw: null };
+        });
+    }
+
+    async function loadSingleNightCharts() {
+        var statusEl = document.getElementById('sleep-single-night-status');
+        statusEl.innerText = 'Loading session list…';
+        try {
+            await loadSleepSessionsIntoSelectAndPreserveSelection();
+        } catch (err) {
+            console.error(err);
+            statusEl.innerText = 'Could not list sessions: ' + err.message;
+            return;
+        }
+        var sel = document.getElementById('sleep-session-select');
+        var sessionId = sel && sel.value;
+        if (!sessionId) {
+            statusEl.innerText = 'No sleep sessions on record yet. Use the ingest path until the onset state enters ASLEEP at least once.';
+            destroySleepNightCharts();
+            return;
+        }
+
+        statusEl.innerText = 'Loading night data…';
+        destroySleepNightCharts();
+
+        var payload;
+        try {
+            var res = await fetch(
+                '/api/sleep-session/night-readings?session_id=' + encodeURIComponent(sessionId)
+            );
+            payload = await res.json();
+            if (!res.ok) throw new Error(payload.error || res.statusText);
+        } catch (err) {
+            console.error(err);
+            statusEl.innerText = 'Could not load night: ' + err.message;
+            return;
+        }
+
+        var rows = payload.points || [];
+        var wStart = parseUtcTimestamp(payload.window_start);
+        var wEnd = parseUtcTimestamp(payload.window_end);
+        if (!wStart || !wEnd || Number.isNaN(wStart.getTime()) || Number.isNaN(wEnd.getTime())) {
+            statusEl.innerText = 'Invalid response from server.';
+            return;
+        }
+
+        var tMin = wStart.getTime();
+        var tMax = wEnd.getTime();
+        var sessionHasSamples = rows.length > 0;
+        var sparse = rows.length > 200;
+
+        if (!sessionHasSamples) {
+            statusEl.innerText = 'Guide view · no nightly samples recorded for session '
+                + payload.session_id + ' (' + payload.window_start + ' → ' + payload.window_end + ').';
+            setSleepChartGuide('sleep-wrap-compare', true, SLEEP_ONSET_GUIDE_MSG);
+        } else {
+            var sessBit = payload.ongoing ? ' (session still active — end is current time)' : '';
+            statusEl.innerText = rows.length + ' samples · session ' + payload.session_id + ' · '
+                + payload.window_start + ' → ' + payload.window_end + ' UTC' + sessBit;
+            setSleepChartGuide('sleep-wrap-compare', false);
+        }
+
+        /* --- Overlay comparison chart (normalized; legend clicks toggle datasets) --- */
+        (function () {
+            var canvas = document.getElementById('sleepChartCompare');
+            if (!canvas) return;
+            var compareDefs = [
+                { key: 'heart_rate', label: 'Heart rate', color: '#f4d976', unit: 'bpm', defaultHidden: false },
+                { key: 'ambient_noise', label: 'Ambient noise', color: '#5eead4', unit: 'dB', defaultHidden: false },
+                { key: 'ambient_light', label: 'Ambient light', color: '#fde047', unit: 'lux', defaultHidden: false },
+                { key: 'prv_ms', label: 'HRV / PRV', color: '#7ef2c5', unit: 'ms', defaultHidden: true },
+                { key: 'spo2', label: 'SpO₂', color: '#2dd4bf', unit: '%', defaultHidden: true },
+                { key: 'voc', label: 'Air quality (VOC)', color: '#bef264', unit: 'idx', defaultHidden: true },
+                { key: 'gyro_variance', label: 'Movement (gyro)', color: '#d4af37', unit: 'var', defaultHidden: true },
+            ];
+            var ds = [];
+            for (var ci = 0; ci < compareDefs.length; ci++) {
+                var spec = compareDefs[ci];
+                var rawPts = mapNightPoints(rows, spec.key);
+                var normed = normalizeSeriesWithRaw(rawPts);
+                var hasReal = normed.some(function (d) {
+                    return d.y !== null && Number.isFinite(d.y);
+                });
+                var pts;
+                var ghostCompare = (!sessionHasSamples) || !hasReal;
+                if (!ghostCompare) {
+                    pts = normed;
+                } else {
+                    pts = ghostNormalizedComparePoints(tMin, tMax, ci * 1.71, 64);
+                }
+                ds.push({
+                    label: spec.label,
+                    data: pts,
+                    unit: spec.unit,
+                    spanGaps: true,
+                    tension: ghostCompare ? 0.12 : 0.22,
+                    pointRadius: ghostCompare ? 0 : (sparse ? 0 : 2),
+                    borderWidth: ghostCompare ? 1.2 : 1.6,
+                    borderDash: ghostCompare ? [6, 6] : [],
+                    hidden: ghostCompare ? false : spec.defaultHidden,
+                    borderColor: ghostCompare ? 'rgba(255,255,255,0.12)' : spec.color,
+                    backgroundColor: 'transparent',
+                    borderCapStyle: 'round',
+                    borderJoinStyle: 'round',
+                });
+            }
+
+            var ch = new Chart(canvas, {
+                type: 'line',
+                data: { datasets: ds },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            min: tMin,
+                            max: tMax,
+                            ticks: {
+                                maxRotation: 0,
+                                autoSkip: true,
+                                color: 'rgba(255,255,255,0.45)',
+                            },
+                            grid: { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                            time: { tooltipFormat: 'MMM d HH:mm' },
+                        },
+                        y: {
+                            type: 'linear',
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: 'Relative scale (%)', color: 'rgba(255,255,255,0.6)' },
+                            ticks: {
+                                callback: function (v) {
+                                    return v + '%';
+                                },
+                                color: 'rgba(255,255,255,0.45)',
+                            },
+                            grid: { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function (ctx) {
+                                    var lbl = ctx.dataset.label || '';
+                                    var u = ctx.dataset.unit ? ' ' + ctx.dataset.unit : '';
+                                    var r = ctx.raw;
+                                    if (r && typeof r.raw === 'number') {
+                                        return ' ' + lbl + ': ' + r.raw.toPrecision(6) + u;
+                                    }
+                                    return ' ' + lbl + ': —' + (u ? '(' + u.trim() + ' preview)' : ' (preview)');
+                                },
+                            },
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: {
+                                wheel: { enabled: true },
+                                pinch: { enabled: true },
+                                mode: 'x',
+                            },
+                            limits: { x: { min: tMin, max: tMax } },
+                        },
+                    },
+                },
+            });
+            sleepNightCharts.push(ch);
+        })();
+
+        /* --- Separate synchronized detail charts --- */
+        var detailSpecs = [
+            {
+                wrapId: 'sleep-wrap-heart_rate',
+                canvasId: 'sleepChartHr',
+                field: 'heart_rate',
+                yTitle: 'Heart rate (bpm)',
+                color: '#f4d976',
+                beginAtZero: false,
+                ghostBand: [58, 86],
+                phase: 0.2,
+            },
+            {
+                wrapId: 'sleep-wrap-spo2',
+                canvasId: 'sleepChartSpo2',
+                field: 'spo2',
+                yTitle: 'SpO₂ (%)',
+                color: '#2dd4bf',
+                spo2Band: true,
+                ghostBand: [91, 98],
+                phase: 0.9,
+            },
+            {
+                wrapId: 'sleep-wrap-prv_ms',
+                canvasId: 'sleepChartPrv',
+                field: 'prv_ms',
+                yTitle: 'HRV / PRV (ms)',
+                color: '#7ef2c5',
+                beginAtZero: true,
+                ghostBand: [38, 95],
+                phase: 1.4,
+            },
+            {
+                wrapId: 'sleep-wrap-ambient_light',
+                canvasId: 'sleepChartLight',
+                field: 'ambient_light',
+                yTitle: 'Ambient light (lux)',
+                color: '#fde047',
+                beginAtZero: true,
+                ghostBand: [12, 220],
+                phase: 0.65,
+            },
+            {
+                wrapId: 'sleep-wrap-voc',
+                canvasId: 'sleepChartVoc',
+                field: 'voc',
+                yTitle: 'Air quality / VOC index',
+                color: '#bef264',
+                beginAtZero: true,
+                ghostBand: [150, 420],
+                phase: 2.0,
+            },
+            {
+                wrapId: 'sleep-wrap-ambient_noise',
+                canvasId: 'sleepChartNoise',
+                field: 'ambient_noise',
+                yTitle: 'Ambient noise (dB)',
+                color: '#5eead4',
+                beginAtZero: true,
+                ghostBand: [34, 52],
+                phase: 1.1,
+            },
+            {
+                wrapId: 'sleep-wrap-gyro_variance',
+                canvasId: 'sleepChartGyro',
+                field: 'gyro_variance',
+                yTitle: 'Movement (gyro variance)',
+                color: '#d4af37',
+                beginAtZero: true,
+                ghostBand: [15, 90],
+                phase: 2.5,
+            },
+        ];
+
+        for (var di = 0; di < detailSpecs.length; di++) {
+            (function () {
+                var spec = detailSpecs[di];
+                var canvas = document.getElementById(spec.canvasId);
+                if (!canvas) return;
+
+                var metricEmpty = !sessionHasSamples || nightFiniteCount(rows, spec.field) === 0;
+                var ghostOnly = metricEmpty || !sessionHasSamples;
+                var capMsg = ghostOnly
+                    ? (sessionHasSamples ? SLEEP_METRIC_GAP_MSG : SLEEP_ONSET_GUIDE_MSG)
+                    : '';
+                setSleepChartGuide(spec.wrapId, ghostOnly, capMsg);
+
+                var dataPts = metricEmpty ? [] : mapNightPoints(rows, spec.field);
+                var overlayPts = ghostOnly
+                    ? ghostSinMetricPoints(
+                        tMin,
+                        tMax,
+                        spec.ghostBand[0],
+                        spec.ghostBand[1],
+                        spec.phase,
+                        56
+                    )
+                    : [];
+
+                var yScale = {
+                    title: { display: true, text: spec.yTitle, color: 'rgba(255,255,255,0.65)' },
+                    beginAtZero: !!spec.beginAtZero,
+                    ticks: { color: 'rgba(255,255,255,0.45)' },
+                    grid: { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                };
+                if (spec.spo2Band) {
+                    yScale.suggestedMin = 88;
+                    yScale.suggestedMax = 100;
+                }
+
+                var datasets = [];
+                if (ghostOnly) {
+                        datasets.push({
+                        label: spec.yTitle,
+                        data: overlayPts,
+                        borderColor: 'rgba(255,255,255,0.18)',
+                        backgroundColor: 'transparent',
+                        spanGaps: true,
+                        tension: 0.15,
+                        pointRadius: 0,
+                        borderWidth: 1.35,
+                        borderDash: [6, 7],
+                        fill: false,
+                    });
+                } else {
+                    datasets.push({
+                        label: spec.yTitle,
+                        data: dataPts,
+                        borderColor: spec.color,
+                        backgroundColor: spec.color + '18',
+                        spanGaps: true,
+                        tension: 0.15,
+                        pointRadius: sparse ? 0 : 2,
+                        borderWidth: 1.5,
+                        fill: false,
+                    });
+                }
+
+                var ch2 = new Chart(canvas, {
+                    type: 'line',
+                    data: { datasets: datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                min: tMin,
+                                max: tMax,
+                                ticks: {
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    color: 'rgba(255,255,255,0.45)',
+                                },
+                                grid: { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                                time: { tooltipFormat: 'MMM d HH:mm' },
+                            },
+                            y: yScale,
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { mode: 'index', intersect: false },
+                            zoom: {
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x',
+                                },
+                                zoom: {
+                                    wheel: { enabled: true },
+                                    pinch: { enabled: true },
+                                    mode: 'x',
+                                },
+                                limits: {
+                                    x: { min: tMin, max: tMax },
+                                },
+                            },
+                        },
+                    },
+                });
+                sleepNightCharts.push(ch2);
+            })();
+        }
+
+        attachSleepNightAxisSync(sleepNightCharts);
+    }
+
+    async function loadWeeklyTrendsChart() {
+        const st = document.getElementById('sleep-weekly-status');
+        st.innerText = 'Loading weekly summary…';
+        if (weeklyTrendsChart) {
+            weeklyTrendsChart.destroy();
+            weeklyTrendsChart = null;
+        }
+        let payload;
+        try {
+            const res = await fetch('/api/sleep-readiness/weekly-summary');
+            payload = await res.json();
+            if (!res.ok) throw new Error(payload.error || res.statusText);
+        } catch (err) {
+            console.error(err);
+            st.innerText = `Could not load weekly data: ${err.message}`;
+            return;
+        }
+
+        const days = payload.days || [];
+        if (!days.length) {
+            st.innerText =
+                'No scored sleep sessions yet. After at least one ASLEEP→AWAKE cycle, readiness appears here.';
+            return;
+        }
+        const labels = days.map((d) => {
+            const dt = parseUtcTimestamp(`${d.score_date}T12:00:00Z`);
+            return dt
+                ? dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                : d.score_date;
+        });
+        const readiness = days.map((d) => (
+            d.readiness_score === null || d.readiness_score === undefined
+                ? null
+                : d.readiness_score
+        ));
+        const prvVals = days.map((d) => (
+            d.avg_prv_ms === null || d.avg_prv_ms === undefined ? null : d.avg_prv_ms
+        ));
+
+        const canvas = document.getElementById('sleepWeeklyChart');
+        if (!canvas) return;
+
+        weeklyTrendsChart = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Sleep readiness score',
+                        data: readiness,
+                        backgroundColor: 'rgba(212, 175, 55, 0.55)',
+                        borderColor: 'rgba(212, 175, 55, 0.95)',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                    },
+                    {
+                        label: 'Average PRV (ms)',
+                        data: prvVals,
+                        backgroundColor: 'rgba(126, 242, 197, 0.22)',
+                        borderColor: 'rgba(126, 242, 197, 0.75)',
+                        borderWidth: 1,
+                        yAxisID: 'y1',
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: {
+                        offset: true,
+                        ticks: { maxRotation: 0, autoSkip: false, color: 'rgba(255,255,255,0.5)' },
+                        grid: { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'Readiness (0–100)', color: 'rgba(255,255,255,0.65)' },
+                        ticks: { color: 'rgba(255,255,255,0.5)' },
+                        grid: { color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        grid: { drawOnChartArea: false, color: 'rgba(255,255,255,0.03)', lineWidth: 1 },
+                        title: { display: true, text: 'Avg PRV (ms)', color: 'rgba(255,255,255,0.65)' },
+                        ticks: { color: 'rgba(255,255,255,0.5)' },
+                        beginAtZero: true,
+                    },
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { color: 'rgba(255,255,255,0.72)' },
+                    },
+                    tooltip: { mode: 'index', intersect: false },
+                },
+            },
+        });
+
+        const missingReadiness = days.filter((d) => d.readiness_score === null).length;
+        st.innerText =
+            `Latest ${days.length || 0} completed sleep sessions (wake day UTC ${payload.range_start} → ${payload.range_end}). ${
+                missingReadiness ? `${missingReadiness} slot(s) have no stored readiness.` : ''
+            }`.trim();
+    }
+
+    function updateSleepHistoryModeUI() {
+        const mode = document.getElementById('sleep-history-mode').value;
+        const nightLbl = document.getElementById('sleep-session-select-label');
+        const single = document.getElementById('sleep-single-night-wrap');
+        const weekly = document.getElementById('sleep-weekly-wrap');
+        const nightMode = mode === 'single-night';
+        if (nightLbl) {
+            nightLbl.classList.toggle('hidden', !nightMode);
+            nightLbl.classList.toggle('flex', nightMode);
+        }
+        single.classList.toggle('hidden', !nightMode);
+        weekly.classList.toggle('hidden', nightMode);
+        if (nightMode) {
+            loadSingleNightCharts();
+        } else {
+            destroySleepNightCharts();
+            loadWeeklyTrendsChart();
+        }
+    }
+
+    document.getElementById('sleep-history-mode').addEventListener('change', updateSleepHistoryModeUI);
+    document.getElementById('sleep-session-select').addEventListener('change', () => {
+        if (document.getElementById('sleep-history-mode').value === 'single-night') {
+            loadSingleNightCharts();
+        }
+    });
+    document.getElementById('sleep-night-reset-zoom').addEventListener('click', () => {
+        sleepNightCharts.forEach((c) => {
+            try {
+                if (typeof c.resetZoom === 'function') {
+                    c.resetZoom();
+                }
+            } catch (e) {
+                console.warn('resetZoom skipped', e);
+            }
+        });
+    });
+
+    updateSleepHistoryModeUI();
+
+    setInterval(() => {
+        fetch('/api/latest-readings')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.timestamp || data.timestamp === 'N/A') {
+                    setLiveReadingsNoDataState();
+                    return;
+                }
+
+                const incomingDate = parseUtcTimestamp(data.timestamp);
+                if (!incomingDate || Number.isNaN(incomingDate.getTime())) {
+                    return;
+                }
+                const incomingTimeMs = incomingDate.getTime();
+
+                if (incomingTimeMs <= lastSeenTimeMs) {
+                    return;
+                }
+                lastSeenTimeMs = incomingTimeMs;
+
+                document.querySelector('.temp-val').innerText = formatLiveReadingMetric(
+                    data.temperature,
+                    '°',
+                );
+                document.querySelector('.hum-val').innerText = formatLiveReadingMetric(data.humidity, '%');
+
+                const hr = document.getElementById('live-heart-rate');
+                const sp = document.getElementById('live-spo2');
+                const nz = document.getElementById('live-ambient-noise');
+                const voc = document.getElementById('live-voc');
+                if (hr) hr.innerText = formatLiveReadingMetric(data.heart_rate, 'bpm');
+                if (sp) sp.innerText = formatLiveReadingMetric(data.spo2, '%');
+                if (nz) nz.innerText = formatLiveReadingMetric(data.ambient_noise, 'dB');
+                if (voc) voc.innerText = formatLiveReadingMetric(data.air_quality, '');
+
+                const lux = document.getElementById('live-lumens');
+                if (lux) lux.innerText = formatLiveReadingMetric(data.ambient_light, '');
+
+                document.getElementById('last-update').innerText = incomingDate.toLocaleTimeString();
+            })
+            .catch(error => console.error('Error fetching data:', error));
+    }, 5000);
+
+    // Convert Search Table UTC times to Local Time
+    document.querySelectorAll('.utc-table-time').forEach(el => {
+        const exactTime = parseUtcTimestamp(el.innerText);
+        if (exactTime && !Number.isNaN(exactTime.getTime())) {
+            el.innerText = exactTime.toLocaleString();
+        }
+    });
+
+    // The Weather Auto-Updater & Search
+    let currentCity = 'Kansas City'; // default city 
+
+    function updateWeather(city) {
+        // fetch weather data from our Flask API endpoint
+        // encodeURIComponent is used to safely handle spaces and special characters in city names
+        fetch(`/api/weather?city=${encodeURIComponent(city)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error("Weather API Error:", data.error);
+                    document.getElementById('weather-location').innerText = "City Not Found";
+                    document.getElementById('weather-desc').innerText = "Please try another search.";
+                    document.getElementById('weather-temp').innerText = "--";
+                    document.getElementById('weather-temp-f').innerText = "--";
+                    document.getElementById('weather-hum').innerText = "--";
+                    document.getElementById('weather-icon').classList.add('hidden');
+                    return;
+                }
+                
+                document.getElementById('weather-location').innerText = `${data.location.name}, ${data.location.region}`;
+                document.getElementById('weather-desc').innerText = data.current.condition.text;
+                document.getElementById('weather-temp').innerText = data.current.temp_c;
+                document.getElementById('weather-temp-f').innerText = data.current.temp_f;
+                document.getElementById('weather-hum').innerText = data.current.humidity;
+                
+                // Update weather icon
+                const iconImg = document.getElementById('weather-icon');
+                iconImg.src = "https:" + data.current.condition.icon;
+                iconImg.classList.remove('hidden');
+
+                document.getElementById('weather-time').innerText = data.current.last_updated;
+                document.getElementById('weather-city-input').value = "";
+            })
+            .catch(error => console.error('Error fetching weather:', error));
+    }
+
+    // Triggered when user clicks the search button or presses Enter in the input field
+    function searchWeather() {
+        const inputVal = document.getElementById('weather-city-input').value;
+        if (inputVal.trim() !== "") {
+            currentCity = inputVal; 
+            updateWeather(currentCity); 
+        }
+    }
+
+    updateWeather(currentCity);
+    // auto-update weather every 10 minutes
+    setInterval(() => updateWeather(currentCity), 600000);
+
+    // Configuration Panel — comfort range slider (°F guardrails + optimal band)
+    const tempComfortDefaults = Object.freeze({
+        guardMin: 60,
+        guardMax: 75,
+        optMin: 65,
+        optMax: 68,
+    });
+
+    let tempComfort = {
+        guardMin: tempComfortDefaults.guardMin,
+        guardMax: tempComfortDefaults.guardMax,
+        optMin: tempComfortDefaults.optMin,
+        optMax: tempComfortDefaults.optMax,
+    };
+
+    let comfortBandDragging = false;
+    let comfortDragOrigin = null;
+    let comfortBandPostTimer = null;
+
+    function syncComfortInputsToState() {
+        const gMi = parseFloat(document.getElementById('cfg-guardrail-f-min').value);
+        const gMa = parseFloat(document.getElementById('cfg-guardrail-f-max').value);
+        if (Number.isFinite(gMi)) tempComfort.guardMin = gMi;
+        if (Number.isFinite(gMa)) tempComfort.guardMax = gMa;
+    }
+
+    function clampComfortGuardrails() {
+        if (tempComfort.guardMin >= tempComfort.guardMax) {
+            const t = tempComfort.guardMin;
+            tempComfort.guardMin = Math.min(t, tempComfort.guardMax - 1);
+            tempComfort.guardMax = Math.max(t + 1, tempComfort.guardMax);
+        }
+        tempComfort.guardMin = Math.max(
+            40,
+            Math.min(109, tempComfort.guardMin)
+        );
+        tempComfort.guardMax = Math.max(
+            tempComfort.guardMin + 0.5,
+            Math.min(110, tempComfort.guardMax)
+        );
+    }
+
+    function clampComfortOptimal() {
+        let w = tempComfort.optMax - tempComfort.optMin;
+        if (w < 0.5) {
+            tempComfort.optMax = tempComfort.optMin + 0.5;
+            w = 0.5;
+        }
+        const span = tempComfort.guardMax - tempComfort.guardMin;
+        w = Math.min(w, span);
+        tempComfort.optMin = Math.max(
+            tempComfort.guardMin,
+            Math.min(tempComfort.optMin, tempComfort.guardMax - w)
+        );
+        tempComfort.optMax = tempComfort.optMin + w;
+        if (tempComfort.optMax > tempComfort.guardMax) {
+            tempComfort.optMax = tempComfort.guardMax;
+            tempComfort.optMin = tempComfort.optMax - w;
+            if (tempComfort.optMin < tempComfort.guardMin) {
+                tempComfort.optMin = tempComfort.guardMin;
+            }
+        }
+    }
+
+    function writeComfortInputsFromState() {
+        document.getElementById('cfg-guardrail-f-min').value = String(tempComfort.guardMin);
+        document.getElementById('cfg-guardrail-f-max').value = String(tempComfort.guardMax);
+    }
+
+    function renderComfortSlider() {
+        const track = document.getElementById('cfg-temp-range-track');
+        const band = document.getElementById('cfg-temp-range-optimal');
+        const overrideOn = document.getElementById('cfg-override-optimal').checked;
+        const gmin = tempComfort.guardMin;
+        const gmax = tempComfort.guardMax;
+        const span = gmax - gmin;
+        if (span <= 0) return;
+
+        const leftPct = ((tempComfort.optMin - gmin) / span) * 100;
+        const widthPct = ((tempComfort.optMax - tempComfort.optMin) / span) * 100;
+
+        band.style.left = `${Math.max(0, Math.min(leftPct, 100))}%`;
+        band.style.width = `${Math.max(0, Math.min(widthPct, 100 - leftPct))}%`;
+
+        document.getElementById('cfg-temp-range-label-low').innerText =
+            `${tempComfort.guardMin.toFixed(0)}°F`;
+        document.getElementById('cfg-temp-range-label-high').innerText =
+            `${tempComfort.guardMax.toFixed(0)}°F`;
+        document.getElementById('cfg-optimal-label').innerText =
+            `Optimal ${tempComfort.optMin.toFixed(1)}–${tempComfort.optMax.toFixed(1)} °F`;
+
+        band.classList.toggle('cfg-temp-range-draggable', overrideOn && !comfortBandDragging);
+        if (overrideOn) {
+            band.setAttribute('title', 'Drag to slide optimal band inside guardrails');
+        } else {
+            band.removeAttribute('title');
+        }
+    }
+
+    function scheduleComfortBandPost() {
+        clearTimeout(comfortBandPostTimer);
+        comfortBandPostTimer = setTimeout(postComfortBandOnly, 500);
+    }
+
+    /**
+     * Persists optimal band after drag/autosave. Always sends guardrail °F bounds too so Flask
+     * validates the band against the same min/max shown in the UI (not stale DB guardrails).
+     */
+    async function postComfortBandOnly() {
+        syncComfortInputsToState();
+        try {
+            const response = await fetch('/api/user-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    guardrail_temp_f_min: tempComfort.guardMin,
+                    guardrail_temp_f_max: tempComfort.guardMax,
+                    optimal_band_f_min: tempComfort.optMin,
+                    optimal_band_f_max: tempComfort.optMax,
+                    override_optimal_band: document.getElementById('cfg-override-optimal').checked,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Band save failed');
+            const cs = document.getElementById('config-status');
+            if (cs && !cs.innerText.startsWith('Saved to account')) {
+                cs.innerText = `Comfort band synced (${new Date().toLocaleTimeString()})`;
+            }
+        } catch (err) {
+            console.error(err);
+            document.getElementById('config-status').innerText =
+                `Band autosave failed: ${err.message}`;
+        }
+    }
+
+    function attachComfortSliderHandlers() {
+        const gminEl = document.getElementById('cfg-guardrail-f-min');
+        const gmaxEl = document.getElementById('cfg-guardrail-f-max');
+        const band = document.getElementById('cfg-temp-range-optimal');
+        const track = document.getElementById('cfg-temp-range-track');
+        const overrideEl = document.getElementById('cfg-override-optimal');
+
+        const onGuardrailChange = () => {
+            syncComfortInputsToState();
+            clampComfortGuardrails();
+            clampComfortOptimal();
+            writeComfortInputsFromState();
+            renderComfortSlider();
+        };
+
+        gminEl.addEventListener('change', onGuardrailChange);
+        gmaxEl.addEventListener('change', onGuardrailChange);
+        gminEl.addEventListener('input', onGuardrailChange);
+        gmaxEl.addEventListener('input', onGuardrailChange);
+
+        overrideEl.addEventListener('change', () => {
+            renderComfortSlider();
+            syncComfortInputsToState();
+            fetch('/api/user-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    guardrail_temp_f_min: tempComfort.guardMin,
+                    guardrail_temp_f_max: tempComfort.guardMax,
+                    optimal_band_f_min: tempComfort.optMin,
+                    optimal_band_f_max: tempComfort.optMax,
+                    override_optimal_band: overrideEl.checked,
+                }),
+            })
+                .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
+                .then(({ ok, body }) => {
+                    if (!ok) throw new Error(body.error || 'Override save failed');
+                })
+                .catch((err) => {
+                    console.error(err);
+                    document.getElementById('config-status').innerText = `Override save failed: ${err.message}`;
+                });
+        });
+
+        function beginComfortBandDrag(clientX) {
+            comfortBandDragging = true;
+            band.classList.add('cfg-temp-range-dragging');
+            const rect = track.getBoundingClientRect();
+            const span = tempComfort.guardMax - tempComfort.guardMin;
+            comfortDragOrigin = {
+                clientX0: clientX,
+                optMin0: tempComfort.optMin,
+                bandWidth: Math.max(tempComfort.optMax - tempComfort.optMin, 0.5),
+                trackWidth: Math.max(rect.width, 1),
+                guardSpan: Math.max(span, 0.5),
+                guardMin: tempComfort.guardMin,
+                guardMax: tempComfort.guardMax,
+            };
+        }
+
+        function comfortBandApplyClientX(clientX) {
+            if (!comfortBandDragging || !comfortDragOrigin) return;
+            const d = comfortDragOrigin;
+            const dx = clientX - d.clientX0;
+            const deltaF = (dx / d.trackWidth) * (d.guardMax - d.guardMin);
+            let nMin = d.optMin0 + deltaF;
+            const gw = Math.max(d.bandWidth, 0.5);
+            nMin = Math.max(d.guardMin, Math.min(nMin, d.guardMax - gw));
+            tempComfort.optMin = nMin;
+            tempComfort.optMax = nMin + gw;
+            renderComfortSlider();
+        }
+
+        band.addEventListener('mousedown', (event) => {
+            if (!overrideEl.checked) return;
+            event.preventDefault();
+            beginComfortBandDrag(event.clientX);
+        });
+
+        band.addEventListener(
+            'touchstart',
+            (event) => {
+                if (!overrideEl.checked) return;
+                if (!event.touches || event.touches.length === 0) return;
+                event.preventDefault();
+                beginComfortBandDrag(event.touches[0].clientX);
+            },
+            { passive: false },
+        );
+
+        window.addEventListener('mousemove', (event) => {
+            comfortBandApplyClientX(event.clientX);
+        });
+
+        window.addEventListener(
+            'touchmove',
+            (event) => {
+                if (!comfortBandDragging || !comfortDragOrigin) return;
+                const t = event.touches && event.touches[0];
+                if (!t) return;
+                event.preventDefault();
+                comfortBandApplyClientX(t.clientX);
+            },
+            { passive: false },
+        );
+
+        function finishComfortBandDragIfNeeded() {
+            if (!comfortBandDragging) return;
+            comfortBandDragging = false;
+            comfortDragOrigin = null;
+            band.classList.remove('cfg-temp-range-dragging');
+            renderComfortSlider();
+            if (overrideEl.checked) scheduleComfortBandPost();
+        }
+
+        window.addEventListener('mouseup', finishComfortBandDragIfNeeded);
+        window.addEventListener('touchend', finishComfortBandDragIfNeeded, { passive: true });
+        window.addEventListener('touchcancel', finishComfortBandDragIfNeeded, { passive: true });
+    }
+
+    // Configuration Panel (persisted per authenticated user)
+    async function initializeConfigPanel() {
+        try {
+            const response = await fetch('/api/user-config');
+            const cfg = await response.json();
+            if (!response.ok) throw new Error(cfg.error || 'Failed to load configuration');
+
+            document.getElementById('cfg-temp-min').value = cfg.temp_min ?? '';
+            document.getElementById('cfg-temp-max').value = cfg.temp_max ?? '';
+            document.getElementById('cfg-noise-limit').value = cfg.noise_limit ?? '';
+            document.getElementById('cfg-wake-time').value = cfg.wake_time ?? '';
+
+            tempComfort.guardMin =
+                cfg.guardrail_temp_f_min ?? tempComfortDefaults.guardMin;
+            tempComfort.guardMax =
+                cfg.guardrail_temp_f_max ?? tempComfortDefaults.guardMax;
+            tempComfort.optMin =
+                cfg.optimal_band_f_min ?? tempComfortDefaults.optMin;
+            tempComfort.optMax =
+                cfg.optimal_band_f_max ?? tempComfortDefaults.optMax;
+            document.getElementById('cfg-override-optimal').checked =
+                !!cfg.override_optimal_band;
+
+            writeComfortInputsFromState();
+            clampComfortGuardrails();
+            clampComfortOptimal();
+            writeComfortInputsFromState();
+            renderComfortSlider();
+
+            document.getElementById('config-status').innerText = 'Loaded account configuration.';
+            updateMinutesToWakeDisplay();
+        } catch (err) {
+            console.error('Failed to load configuration panel settings:', err);
+            document.getElementById('config-status').innerText = 'Unable to load saved config.';
+        }
+    }
+
+    async function saveConfigPanel() {
+        syncComfortInputsToState();
+        clampComfortGuardrails();
+        clampComfortOptimal();
+        writeComfortInputsFromState();
+        renderComfortSlider();
+
+        const configPayload = {
+            temp_min: document.getElementById('cfg-temp-min').value,
+            temp_max: document.getElementById('cfg-temp-max').value,
+            noise_limit: document.getElementById('cfg-noise-limit').value,
+            wake_time: document.getElementById('cfg-wake-time').value,
+            guardrail_temp_f_min: tempComfort.guardMin,
+            guardrail_temp_f_max: tempComfort.guardMax,
+            optimal_band_f_min: tempComfort.optMin,
+            optimal_band_f_max: tempComfort.optMax,
+            override_optimal_band:
+                document.getElementById('cfg-override-optimal').checked,
+        };
+
+        try {
+            const response = await fetch('/api/user-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(configPayload),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Save failed');
+            document.getElementById('config-status').innerText =
+                `Saved to account at ${new Date().toLocaleTimeString()}`;
+            updateMinutesToWakeDisplay();
+        } catch (err) {
+            console.error('Failed to save configuration:', err);
+            document.getElementById('config-status').innerText =
+                `Save failed: ${err.message}`;
+        }
+    }
+
+    async function resetConfigPanel() {
+        document.getElementById('cfg-temp-min').value = '';
+        document.getElementById('cfg-temp-max').value = '';
+        document.getElementById('cfg-noise-limit').value = '';
+        document.getElementById('cfg-wake-time').value = '';
+        document.getElementById('cfg-override-optimal').checked = false;
+        tempComfort = {
+            guardMin: tempComfortDefaults.guardMin,
+            guardMax: tempComfortDefaults.guardMax,
+            optMin: tempComfortDefaults.optMin,
+            optMax: tempComfortDefaults.optMax,
+        };
+        writeComfortInputsFromState();
+        renderComfortSlider();
+        await saveConfigPanel();
+    }
+
+    let morningReviewState = { target_session_date: null, review: null };
+
+    function formatMorningReviewStars(n) {
+        const r = Number(n);
+        if (!Number.isFinite(r)) return '';
+        const full = Math.max(1, Math.min(5, Math.round(r)));
+        let s = '';
+        for (let i = 1; i <= 5; i += 1) {
+            s += i <= full ? '★' : '☆';
+        }
+        return s;
+    }
+
+    function renderMorningReviewSummary(review) {
+        const wrap = document.getElementById('morning-review-star-visual');
+        wrap.textContent = '';
+        const starSpan = document.createElement('span');
+        starSpan.className = 'tracking-[0.15em] text-amber-400';
+        starSpan.title = `${review.rating} of 5 stars`;
+        starSpan.textContent = formatMorningReviewStars(review.rating);
+        wrap.appendChild(starSpan);
+        document.getElementById('morning-review-rating-num').textContent = `${review.rating} / 5`;
+        const noteEl = document.getElementById('morning-review-note-display');
+        noteEl.classList.remove('has-notes', 'no-notes');
+        if (review.notes && review.notes.trim()) {
+            noteEl.textContent = review.notes;
+            noteEl.classList.add('has-notes');
+        } else {
+            noteEl.textContent = '(No notes)';
+            noteEl.classList.add('no-notes');
+        }
+        morningReviewState.review = review;
+    }
+
+    async function refreshMorningReviewCard() {
+        const loadEl = document.getElementById('morning-review-loading');
+        const emptyEl = document.getElementById('morning-review-empty');
+        const sumEl = document.getElementById('morning-review-summary');
+        const editEl = document.getElementById('morning-review-edit');
+        const statusEl = document.getElementById('morning-review-status-msg');
+        statusEl.innerText = '';
+        loadEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        sumEl.classList.add('hidden');
+        editEl.classList.add('hidden');
+        try {
+            const res = await fetch('/api/subjective-sleep-review/status', { credentials: 'same-origin' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || res.statusText);
+            morningReviewState.target_session_date = data.target_session_date;
+            const label = document.getElementById('morning-review-session-label');
+            const d = parseUtcTimestamp(`${data.target_session_date}T12:00:00Z`);
+            label.textContent = d && !Number.isNaN(d.getTime())
+                ? d.toLocaleDateString(
+                    undefined,
+                    { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' },
+                )
+                : data.target_session_date;
+
+            loadEl.classList.add('hidden');
+            if (!data.has_review) {
+                emptyEl.classList.remove('hidden');
+                document.getElementById('morning-review-form-new').reset();
+            } else {
+                renderMorningReviewSummary(data.review);
+                sumEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error(e);
+            loadEl.classList.add('hidden');
+            emptyEl.classList.remove('hidden');
+            statusEl.innerText = `Could not load review status: ${e.message}`;
+        }
+    }
+
+    async function submitMorningReviewNew() {
+        const statusEl = document.getElementById('morning-review-status-msg');
+        const rating = document.getElementById('morning-review-rating-new').value;
+        if (!rating) {
+            statusEl.innerText = 'Please choose a star rating.';
+            return;
+        }
+        statusEl.innerText = 'Saving…';
+        try {
+            const res = await fetch('/api/subjective-sleep-review', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rating: parseInt(rating, 10),
+                    notes: document.getElementById('morning-review-notes-new').value.trim() || undefined,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || res.statusText);
+            document.getElementById('morning-review-empty').classList.add('hidden');
+            renderMorningReviewSummary(data.review);
+            document.getElementById('morning-review-summary').classList.remove('hidden');
+            document.getElementById('morning-review-form-new').reset();
+            statusEl.innerText = `Saved review for wake session ${data.review.session_date}.`;
+            if (isMorningReviewHistoryTabActive()) loadMorningReviewHistory();
+        } catch (e) {
+            statusEl.innerText = `Save failed: ${e.message}`;
+        }
+    }
+
+    async function submitMorningReviewEdit() {
+        const statusEl = document.getElementById('morning-review-status-msg');
+        const sessionDate = document.getElementById('morning-review-session-date-edit').value;
+        const rating = document.getElementById('morning-review-rating-edit').value;
+        statusEl.innerText = 'Saving…';
+        try {
+            const res = await fetch('/api/subjective-sleep-review', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rating: parseInt(rating, 10),
+                    notes: document.getElementById('morning-review-notes-edit').value.trim() || undefined,
+                    session_date: sessionDate,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || res.statusText);
+            renderMorningReviewSummary(data.review);
+            document.getElementById('morning-review-edit').classList.add('hidden');
+            document.getElementById('morning-review-summary').classList.remove('hidden');
+            statusEl.innerText = `Updated review for wake session ${data.review.session_date}.`;
+            if (isMorningReviewHistoryTabActive()) loadMorningReviewHistory();
+        } catch (e) {
+            statusEl.innerText = `Save failed: ${e.message}`;
+        }
+    }
+
+    function morningReviewMoonSvg() {
+        return '<svg class="mr-rail-icon mr-rail-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+
+    function morningReviewBatterySvg() {
+        return '<svg class="mr-rail-icon mr-rail-icon--battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="6" width="10" height="15" rx="2"/><path d="M10 4h4v2h-4z"/></svg>';
+    }
+
+    function isMorningReviewHistoryTabActive() {
+        const hist = document.getElementById('morning-review-tab-history-panel');
+        return hist && !hist.hasAttribute('hidden');
+    }
+
+    function setMorningReviewTab(tab) {
+        const todayPanel = document.getElementById('morning-review-tab-today-panel');
+        const histPanel = document.getElementById('morning-review-tab-history-panel');
+        const bToday = document.getElementById('morning-review-tab-today-btn');
+        const bHist = document.getElementById('morning-review-tab-history-btn');
+        if (!todayPanel || !histPanel || !bToday || !bHist) return;
+        const showHistory = tab === 'history';
+        if (showHistory) {
+            todayPanel.setAttribute('hidden', '');
+            histPanel.removeAttribute('hidden');
+        } else {
+            todayPanel.removeAttribute('hidden');
+            histPanel.setAttribute('hidden', '');
+        }
+        const btnBase =
+            'flex-1 rounded-xl py-2.5 text-center text-[10px] font-bold uppercase tracking-widest transition-all duration-200';
+        const active =
+            `${btnBase} text-zinc-100 shadow-inner ring-1 ring-amber-500/25 bg-amber-500/15`;
+        const inactive =
+            `${btnBase} text-zinc-500 hover:text-zinc-300`;
+        bToday.className = showHistory ? inactive : active;
+        bHist.className = showHistory ? active : inactive;
+        bToday.setAttribute('aria-selected', showHistory ? 'false' : 'true');
+        bHist.setAttribute('aria-selected', showHistory ? 'true' : 'false');
+        if (showHistory) loadMorningReviewHistory();
+    }
+
+    async function loadMorningReviewHistory() {
+        const wrap = document.getElementById('morning-review-history-list-wrap');
+        const loadEl = document.getElementById('morning-review-history-loading');
+        const emptyEl = document.getElementById('morning-review-history-empty');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (loadEl) loadEl.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/subjective-sleep-review/history?days=7&limit=14', {
+                credentials: 'same-origin',
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || res.statusText);
+            const rows = data.reviews || [];
+            rows.forEach((rev) => {
+                const card = document.createElement('article');
+                card.className = 'morning-review-history-card';
+
+                const dt = parseUtcTimestamp(`${rev.session_date}T12:00:00Z`);
+                const dateStr = dt && !Number.isNaN(dt.getTime())
+                    ? dt.toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                    })
+                    : rev.session_date;
+
+                const headline = document.createElement('div');
+                headline.className = 'morning-review-history-head';
+                const moonWrap = document.createElement('span');
+                moonWrap.className = 'morning-review-inline-icon';
+                moonWrap.setAttribute('title', 'Sleep (subjective)');
+                moonWrap.innerHTML = morningReviewMoonSvg();
+                const headText = document.createElement('div');
+                headText.className = 'morning-review-history-head-text';
+                const stars = document.createElement('span');
+                stars.className = 'morning-review-history-stars';
+                stars.textContent = formatMorningReviewStars(rev.rating);
+                stars.title = `${rev.rating} of 5 stars`;
+                const dateEl = document.createElement('time');
+                dateEl.className = 'morning-review-history-date';
+                dateEl.dateTime = rev.session_date;
+                dateEl.textContent = dateStr;
+                headText.appendChild(stars);
+                headText.appendChild(dateEl);
+                headline.appendChild(moonWrap);
+                headline.appendChild(headText);
+
+                const readiness = document.createElement('div');
+                readiness.className = 'morning-review-history-readiness';
+                const batWrap = document.createElement('span');
+                batWrap.className = 'morning-review-inline-icon';
+                batWrap.setAttribute('title', 'Sleep readiness score');
+                batWrap.innerHTML = morningReviewBatterySvg();
+                const readyText = document.createElement('span');
+                readyText.className = 'morning-review-readiness-text';
+                if (rev.readiness_score !== null && rev.readiness_score !== undefined) {
+                    readyText.textContent = `Readiness ${rev.readiness_score}`;
+                } else {
+                    readyText.textContent = 'Readiness —';
+                    readiness.classList.add('is-missing');
+                }
+                readiness.appendChild(batWrap);
+                readiness.appendChild(readyText);
+
+                const notes = document.createElement('p');
+                notes.className = 'morning-review-history-notes';
+                if (rev.notes && rev.notes.trim()) {
+                    notes.textContent = rev.notes;
+                } else {
+                    notes.classList.add('is-empty');
+                    notes.textContent = 'No notes';
+                }
+
+                card.appendChild(headline);
+                card.appendChild(readiness);
+                card.appendChild(notes);
+                wrap.appendChild(card);
+            });
+            if (!rows.length && emptyEl) {
+                emptyEl.textContent = 'No subjective reviews in the last 7 wake days.';
+                emptyEl.classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error(e);
+            wrap.innerHTML = '';
+            if (emptyEl) {
+                emptyEl.textContent = `Could not load history: ${e.message}`;
+                emptyEl.classList.remove('hidden');
+            }
+        } finally {
+            if (loadEl) loadEl.classList.add('hidden');
+        }
+    }
+
+    function initializeMorningReviewCard() {
+        document.getElementById('morning-review-tab-today-btn').addEventListener('click', () => {
+            setMorningReviewTab('today');
+        });
+        document.getElementById('morning-review-tab-history-btn').addEventListener('click', () => {
+            setMorningReviewTab('history');
+        });
+
+        document.getElementById('morning-review-form-new').addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            submitMorningReviewNew();
+        });
+
+        document.getElementById('morning-review-form-edit').addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            submitMorningReviewEdit();
+        });
+
+        document.getElementById('morning-review-modify-btn').addEventListener('click', () => {
+            document.getElementById('morning-review-summary').classList.add('hidden');
+            document.getElementById('morning-review-edit').classList.remove('hidden');
+            const r = morningReviewState.review;
+            if (!r) return;
+            document.getElementById('morning-review-session-date-edit').value = r.session_date;
+            document.getElementById('morning-review-rating-edit').value = String(r.rating);
+            document.getElementById('morning-review-notes-edit').value = r.notes || '';
+            document.getElementById('morning-review-status-msg').innerText = '';
+        });
+
+        document.getElementById('morning-review-cancel-btn').addEventListener('click', () => {
+            document.getElementById('morning-review-edit').classList.add('hidden');
+            document.getElementById('morning-review-summary').classList.remove('hidden');
+            document.getElementById('morning-review-status-msg').innerText = '';
+        });
+
+        setMorningReviewTab('today');
+        refreshMorningReviewCard();
+    }
+
+    const SUNRISE_CARD_START = { r: 255, g: 140, b: 0 };
+    const SUNRISE_CARD_END = { r: 240, g: 248, b: 255 };
+    const SUNRISE_DEMO_SECONDS = 30;
+    const LS_SUNRISE = {
+        lumenMin: 'sunrise_lumen_min',
+        lumenMax: 'sunrise_lumen_max',
+        kelvinMin: 'sunrise_kelvin_min',
+        kelvinMax: 'sunrise_kelvin_max',
+    };
+
+    /** Kelvin position in range → full-intensity tint (warm … cool). Ignored when lumens are 0. */
+    function sunriseTintRgbFromKelvin(kelvin, kLo, kHi) {
+        const spanK = (kHi - kLo) || 1;
+        const w = Math.min(Math.max((kelvin - kLo) / spanK, 0), 1);
+        const r = Math.round(SUNRISE_CARD_START.r + (SUNRISE_CARD_END.r - SUNRISE_CARD_START.r) * w);
+        const g = Math.round(SUNRISE_CARD_START.g + (SUNRISE_CARD_END.g - SUNRISE_CARD_START.g) * w);
+        const b = Math.round(SUNRISE_CARD_START.b + (SUNRISE_CARD_END.b - SUNRISE_CARD_START.b) * w);
+        return { r, g, b };
+    }
+
+    /** 0…1 scalar from current lumen vs demo range; 0 lm ⇒ 0 (black). */
+    function sunriseLumenBrightness01(lumen, lumenLo, lumenHi) {
+        if (lumen <= 0) return 0;
+        if (lumenHi <= lumenLo) return 1;
+        const t = (lumen - lumenLo) / (lumenHi - lumenLo);
+        return Math.min(Math.max(t, 0), 1);
+    }
+
+    /** Card + accents: brightness tracks lumen output; 0 lm ⇒ #000 regardless of Kelvin. */
+    function sunriseRgbFromLumenKelvin(lumen, kelvin) {
+        const { lumenLo, lumenHi, kLo, kHi } = getSunriseRanges();
+        if (lumen <= 0) {
+            return { r: 0, g: 0, b: 0 };
+        }
+        const bright = sunriseLumenBrightness01(lumen, lumenLo, lumenHi);
+        if (bright <= 0) {
+            return { r: 0, g: 0, b: 0 };
+        }
+        const tint = sunriseTintRgbFromKelvin(kelvin, kLo, kHi);
+        return {
+            r: Math.round(tint.r * bright),
+            g: Math.round(tint.g * bright),
+            b: Math.round(tint.b * bright),
+        };
+    }
+
+    function parseSunriseInput(id, fallback) {
+        const el = document.getElementById(id);
+        const n = parseInt(el && el.value, 10);
+        return Number.isFinite(n) ? n : fallback;
+    }
+
+    /** Sorted min/max for mapping progress to displayed lumens and Kelvin */
+    function getSunriseRanges() {
+        let lumenLo = parseSunriseInput('sunrise-lumen-min', 0);
+        let lumenHi = parseSunriseInput('sunrise-lumen-max', 500);
+        let kLo = parseSunriseInput('sunrise-kelvin-min', 2000);
+        let kHi = parseSunriseInput('sunrise-kelvin-max', 6500);
+        if (lumenLo > lumenHi) [lumenLo, lumenHi] = [lumenHi, lumenLo];
+        if (kLo > kHi) [kLo, kHi] = [kHi, kLo];
+        return { lumenLo, lumenHi, kLo, kHi };
+    }
+
+    function mapProgressToLumenKelvin(progressPercent) {
+        const t01 = Math.min(Math.max(Number(progressPercent) || 0, 0), 100) / 100;
+        const { lumenLo, lumenHi, kLo, kHi } = getSunriseRanges();
+        const lumen = Math.round(lumenLo + (lumenHi - lumenLo) * t01);
+        const kelvin = Math.round(kLo + (kHi - kLo) * t01);
+        return { t01, lumen, kelvin };
+    }
+
+    function sunriseBrightnessPct(lumen, lumenLo, lumenHi) {
+        const lm = Number(lumen);
+        if (!Number.isFinite(lm)) return null;
+        if (lm <= 0) return 0;
+        if (!(Number.isFinite(lumenHi) && Number.isFinite(lumenLo) && lumenHi > lumenLo)) return null;
+        return Math.min(
+            100,
+            Math.max(0, Math.round((100 * (lm - lumenLo)) / (lumenHi - lumenLo))),
+        );
+    }
+
+    /**
+     * Virtual smart-home webhook shape (physical bridge not wired in this codebase).
+     * ``commands`` mirrors hardware-style actuator messages the integration layer would emit.
+     */
+    function renderSimulationSmartHomeIntent(
+        forceHighTemp,
+        forceHighNoise,
+        forceLowTemp,
+        forceVocSpike,
+    ) {
+        const code = document.getElementById('outbound-payload-simulation');
+        if (!code) return;
+        const ft = !!forceHighTemp;
+        const fn = !!forceHighNoise;
+        const fl = !!forceLowTemp;
+        const fv = !!forceVocSpike;
+        const commands = [];
+        let wantFanMax = false;
+        if (ft) {
+            commands.push({ actuator: 'cooling', state: 'on' });
+            wantFanMax = true;
+        }
+        if (fn) {
+            commands.push({ actuator: 'white_noise', state: 'on' });
+            wantFanMax = true;
+        }
+        if (fl) commands.push({ actuator: 'heater', state: 'on' });
+        if (fv) {
+            commands.push({ actuator: 'air_filtration', state: 'on' });
+            wantFanMax = true;
+        }
+        if (wantFanMax) commands.push({ actuator: 'fan', speed: 'max' });
+
+        const scenarios = [];
+        if (ft) scenarios.push('forced_high_temperature');
+        if (fn) scenarios.push('forced_high_noise');
+        if (fl) scenarios.push('forced_low_temperature');
+        if (fv) scenarios.push('forced_voc_spike');
+        const scenario = scenarios.length === 0 ? 'nominal_demo' : scenarios.join('+');
+
+        const intent = {
+            bridge: 'virtual-smart-home (intent only)',
+            issued_at_unix_ms: Date.now(),
+            commands,
+            dashboards_flask_binding: {
+                method: 'POST',
+                path: '/api/dev/simulation',
+                body: {
+                    force_high_temperature: ft,
+                    force_high_noise: fn,
+                    force_low_temperature: fl,
+                    force_voc_spike: fv,
+                },
+            },
+            smart_home_fanout: {
+                target: 'integrations/smart-room/actuators',
+                body: {
+                    environment_id: 'bedroom-sim-01',
+                    scenario,
+                    commands,
+                },
+            },
+        };
+        code.textContent = JSON.stringify(intent, null, 2);
+    }
+
+    function renderSunriseSmartHomeIntent(progressPercent, lumen, kelvin) {
+        const code = document.getElementById('outbound-payload-sunrise');
+        if (!code) return;
+        const prog = Math.min(Math.max(Number(progressPercent) || 0, 0), 100);
+        const { lumenLo, lumenHi } = getSunriseRanges();
+        const bpct = sunriseBrightnessPct(lumen, lumenLo, lumenHi);
+        const lightingTargets = {
+            luminance_lm: Math.round(Number(lumen) || 0),
+            correlated_color_temperature_k: Math.round(Number(kelvin) || 0),
+            transition_hint_ms: sunriseDemoActive ? 120 : 600000,
+        };
+        if (bpct !== null) lightingTargets.brightness_percent = bpct;
+        const intent = {
+            bridge: 'virtual-smart-home (intent only)',
+            issued_at_unix_ms: Date.now(),
+            smart_home_fanout: {
+                target: 'integrations/lighting/wake/sunrise-sequence',
+                body: {
+                    scene: sunriseDemoActive ? 'sunrise_demo_ramp_accelerated' : 'scheduled_sunrise_live',
+                    progress_percent: Math.round(prog * 10) / 10,
+                    lighting_targets: lightingTargets,
+                },
+            },
+        };
+        code.textContent = JSON.stringify(intent, null, 2);
+    }
+
+    function applySunriseVisual(progressPercent, lumen, kelvin) {
+        const p = Math.min(Math.max(Number(progressPercent) || 0, 0), 100);
+        const { r, g, b } = sunriseRgbFromLumenKelvin(lumen, kelvin);
+        const card = document.getElementById('sunrise-card');
+        if (card) card.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+        const bar = document.getElementById('sunrise-progress');
+        const sun = document.getElementById('sunrise-sun');
+        if (bar) bar.style.width = `${p}%`;
+        if (sun) sun.style.left = `${p}%`;
+
+        const lEl = document.getElementById('sunrise-lumen');
+        const kEl = document.getElementById('sunrise-color-temp');
+        if (lEl) lEl.innerText = lumen;
+        if (kEl) kEl.innerText = kelvin;
+
+        if (sun) sun.style.background = `rgb(${r}, ${g}, ${b})`;
+
+        renderSunriseSmartHomeIntent(p, lumen, kelvin);
+    }
+
+    function stopSunriseDemo() {
+        if (sunriseDemoRafId !== null) {
+            cancelAnimationFrame(sunriseDemoRafId);
+            sunriseDemoRafId = null;
+        }
+        sunriseDemoActive = false;
+        const btn = document.getElementById('sunrise-demo-btn');
+        if (btn) btn.innerText = 'Run Demo';
+    }
+
+    function startSunriseDemo() {
+        stopSunriseDemo();
+        sunriseDemoActive = true;
+        const btn = document.getElementById('sunrise-demo-btn');
+        if (btn) btn.innerText = 'Stop Demo';
+
+        const t0 = performance.now();
+        function frame(now) {
+            if (!sunriseDemoActive) return;
+            const elapsed = (now - t0) / 1000;
+            const u = Math.min(elapsed / SUNRISE_DEMO_SECONDS, 1);
+            const progressPct = u * 100;
+            const { lumen, kelvin } = mapProgressToLumenKelvin(progressPct);
+            applySunriseVisual(progressPct, lumen, kelvin);
+            const statusEl = document.getElementById('sunrise-status');
+            if (statusEl) {
+                statusEl.innerText = `Demo: accelerated ramp (${progressPct.toFixed(1)}% · 30 min in ${SUNRISE_DEMO_SECONDS}s)`;
+            }
+            const minEl = document.getElementById('sunrise-minutes');
+            if (minEl) minEl.innerText = '—';
+
+            if (u < 1) {
+                sunriseDemoRafId = requestAnimationFrame(frame);
+            } else {
+                stopSunriseDemo();
+                refreshSunriseSequence();
+            }
+        }
+        sunriseDemoRafId = requestAnimationFrame(frame);
+    }
+
+    function loadSunriseRangeSettings() {
+        try {
+            const lm = localStorage.getItem(LS_SUNRISE.lumenMin);
+            const lx = localStorage.getItem(LS_SUNRISE.lumenMax);
+            const km = localStorage.getItem(LS_SUNRISE.kelvinMin);
+            const kx = localStorage.getItem(LS_SUNRISE.kelvinMax);
+            if (lm != null) document.getElementById('sunrise-lumen-min').value = lm;
+            if (lx != null) document.getElementById('sunrise-lumen-max').value = lx;
+            if (km != null) document.getElementById('sunrise-kelvin-min').value = km;
+            if (kx != null) document.getElementById('sunrise-kelvin-max').value = kx;
+        } catch (e) { /* ignore */ }
+    }
+
+    function persistSunriseRangeSettings() {
+        try {
+            localStorage.setItem(LS_SUNRISE.lumenMin, document.getElementById('sunrise-lumen-min').value);
+            localStorage.setItem(LS_SUNRISE.lumenMax, document.getElementById('sunrise-lumen-max').value);
+            localStorage.setItem(LS_SUNRISE.kelvinMin, document.getElementById('sunrise-kelvin-min').value);
+            localStorage.setItem(LS_SUNRISE.kelvinMax, document.getElementById('sunrise-kelvin-max').value);
+        } catch (e) { /* ignore */ }
+    }
+
+    function initializeSunriseCard() {
+        loadSunriseRangeSettings();
+        ['sunrise-lumen-min', 'sunrise-lumen-max', 'sunrise-kelvin-min', 'sunrise-kelvin-max'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', persistSunriseRangeSettings);
+        });
+        const demoBtn = document.getElementById('sunrise-demo-btn');
+        if (demoBtn) {
+            demoBtn.addEventListener('click', () => {
+                if (sunriseDemoActive) {
+                    stopSunriseDemo();
+                    refreshSunriseSequence();
+                } else {
+                    startSunriseDemo();
+                }
+            });
+        }
+    }
+
+    async function refreshSunriseSequence() {
+        if (sunriseDemoActive) return;
+        try {
+            const response = await fetch('/api/simulated-room');
+            const payload = await response.json();
+            if (!response.ok || !payload.sunrise_sequence) {
+                throw new Error(payload.error || 'No sunrise data available');
+            }
+
+            const sunrise = payload.sunrise_sequence;
+            lastSunriseSequence = sunrise;
+
+            document.getElementById('sunrise-wake-time').innerText = sunrise.wake_time || '--:--';
+
+            updateMinutesToWakeDisplay();
+
+            const preludeMins = getUnifiedMinutesToWake();
+            if (preludeMins !== null && Number.isFinite(preludeMins)) {
+                applyLocalSunrisePreludeFromMinutes(preludeMins);
+                return;
+            }
+
+            const progress = Number(sunrise.progress_percent || 0);
+            const { lumen, kelvin } = mapProgressToLumenKelvin(progress);
+
+            applySunriseVisual(progress, lumen, kelvin);
+
+            const statusText = sunrise.active
+                ? `Ramping (${progress.toFixed(1)}%)`
+                : sunrise.phase === 'wake_now'
+                    ? 'Wake sequence complete'
+                    : 'Waiting for sunrise window';
+            document.getElementById('sunrise-status').innerText = statusText;
+        } catch (err) {
+            console.error('Failed to refresh sunrise sequence:', err);
+            document.getElementById('sunrise-status').innerText = 'Unavailable';
+        }
+    }
+
+    const INTERVENTION_ROW_IDLE =
+        'flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5 ring-1 ring-white/5 transition-all duration-300';
+
+    function applyInterventionBadge(rowId, badgeId, running, runningKind) {
+        const row = document.getElementById(rowId);
+        const badge = document.getElementById(badgeId);
+        if (!row || !badge) return;
+
+        badge.textContent = running ? 'ACTIVE' : 'IDLE';
+
+        const badgeIdle =
+            'rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-all duration-300';
+        const marginPrefix = rowId === 'intervention-air-filtration-row' ? '' : 'mb-2 ';
+        const rowsOff =
+            `${marginPrefix}${INTERVENTION_ROW_IDLE}`;
+        const accent = interventionAccent(runningKind);
+        badge.className = running ? accent.badgeClass : badgeIdle;
+        row.className = running ? `${marginPrefix}${accent.rowClass}` : rowsOff;
+    }
+
+    function interventionAccent(kind) {
+        switch (kind) {
+            case 'cooling':
+                return {
+                    rowClass:
+                        'flex items-center justify-between rounded-2xl bg-teal-500/10 px-3 py-2.5 ring-2 ring-teal-400/35 shadow-[0_0_24px_rgba(126,242,197,0.12)] transition-all duration-300',
+                    badgeClass:
+                        'rounded-full bg-teal-500/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-teal-100 ring-1 ring-teal-400/40 shadow-[0_0_14px_rgba(126,242,197,0.18)] transition-all duration-300',
+                };
+            case 'heater':
+                return {
+                    rowClass:
+                        'flex items-center justify-between rounded-2xl bg-amber-500/[0.09] px-3 py-2.5 ring-2 ring-amber-400/35 shadow-[0_0_26px_rgba(212,175,55,0.14)] transition-all duration-300',
+                    badgeClass:
+                        'rounded-full bg-amber-500/25 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-100 ring-1 ring-amber-400/45 shadow-[0_0_14px_rgba(212,175,55,0.2)] transition-all duration-300',
+                };
+            case 'noise':
+                return {
+                    rowClass:
+                        'flex items-center justify-between rounded-2xl bg-violet-500/[0.08] px-3 py-2.5 ring-2 ring-violet-400/30 shadow-[0_0_22px_rgba(167,139,250,0.12)] transition-all duration-300',
+                    badgeClass:
+                        'rounded-full bg-violet-500/22 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-violet-100 ring-1 ring-violet-400/35 transition-all duration-300',
+                };
+            case 'fan':
+                return {
+                    rowClass:
+                        'flex items-center justify-between rounded-2xl bg-cyan-500/[0.08] px-3 py-2.5 ring-2 ring-cyan-400/35 shadow-[0_0_22px_rgba(126,242,197,0.1)] transition-all duration-300',
+                    badgeClass:
+                        'rounded-full bg-cyan-500/22 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-cyan-100 ring-1 ring-cyan-400/35 transition-all duration-300',
+                };
+            case 'air_filtration':
+                return {
+                    rowClass:
+                        'flex items-center justify-between rounded-2xl bg-emerald-500/[0.09] px-3 py-2.5 ring-2 ring-emerald-400/35 shadow-[0_0_22px_rgba(52,211,153,0.14)] transition-all duration-300',
+                    badgeClass:
+                        'rounded-full bg-emerald-500/24 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-100 ring-1 ring-emerald-400/40 transition-all duration-300',
+                };
+            default:
+                return {
+                    rowClass:
+                        'flex items-center justify-between rounded-2xl bg-white/[0.06] px-3 py-2.5 ring-2 ring-white/15 transition-all duration-300',
+                    badgeClass:
+                        'rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-100 ring-1 ring-white/20 transition-all duration-300',
+                };
+        }
+    }
+
+    function applyDevSimulationToggles(devSim) {
+        const d = devSim || {};
+        const ct = document.getElementById('dev-force-high-temp');
+        const cn = document.getElementById('dev-force-high-noise');
+        const cl = document.getElementById('dev-force-low-temp');
+        const cv = document.getElementById('dev-force-voc-spike');
+        if (ct) ct.checked = d.force_high_temperature === true;
+        if (cn) cn.checked = d.force_high_noise === true;
+        if (cl) cl.checked = d.force_low_temperature === true;
+        if (cv) cv.checked = d.force_voc_spike === true;
+    }
+
+    async function postDevSimulationToggles() {
+        const msgEl = document.getElementById('dev-simulation-status-msg');
+        const ct = document.getElementById('dev-force-high-temp');
+        const cn = document.getElementById('dev-force-high-noise');
+        const cl = document.getElementById('dev-force-low-temp');
+        const cv = document.getElementById('dev-force-voc-spike');
+        if (!ct || !cn || !cl || !cv) return;
+        if (msgEl) msgEl.innerText = '';
+        renderSimulationSmartHomeIntent(ct.checked, cn.checked, cl.checked, cv.checked);
+        try {
+            const postBody = {
+                force_high_temperature: ct.checked,
+                force_high_noise: cn.checked,
+                force_low_temperature: cl.checked,
+                force_voc_spike: cv.checked,
+            };
+            const res = await fetch('/api/dev/simulation', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(postBody),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || res.statusText);
+            if (data.dev_simulation) applyDevSimulationToggles(data.dev_simulation);
+            await refreshSystemInterventionStatus();
+            if (msgEl) msgEl.innerText = '';
+        } catch (e) {
+            console.error(e);
+            if (msgEl) msgEl.innerText = 'Simulation update failed — sign in and try again.';
+        }
+    }
+
+    async function refreshSystemInterventionStatus() {
+        const foot = document.getElementById('intervention-status-footnote');
+        try {
+            const response = await fetch('/api/simulated-room');
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || 'Failed to load intervention state');
+            }
+
+            if (payload.dev_simulation) applyDevSimulationToggles(payload.dev_simulation);
+
+            const si = payload.dev_simulation || {};
+            if (document.getElementById('outbound-payload-simulation')) {
+                renderSimulationSmartHomeIntent(
+                    si.force_high_temperature === true,
+                    si.force_high_noise === true,
+                    si.force_low_temperature === true,
+                    si.force_voc_spike === true,
+                );
+            }
+
+            const hw = payload.simulated_hardware || {};
+            const cool = hw.cooling === true;
+            const heat = hw.heater === true;
+            const noise = hw.white_noise === true;
+            const fanOn = hw.fan === true;
+            const filtration = hw.air_filtration_high_fan === true;
+
+            applyInterventionBadge(
+                'intervention-cooling-row',
+                'intervention-cooling-badge',
+                cool,
+                'cooling',
+            );
+            applyInterventionBadge(
+                'intervention-heater-row',
+                'intervention-heater-badge',
+                heat,
+                'heater',
+            );
+            applyInterventionBadge(
+                'intervention-white-noise-row',
+                'intervention-white-noise-badge',
+                noise,
+                'noise',
+            );
+            applyInterventionBadge(
+                'intervention-fan-row',
+                'intervention-fan-badge',
+                fanOn,
+                'fan',
+            );
+            applyInterventionBadge(
+                'intervention-air-filtration-row',
+                'intervention-air-filtration-badge',
+                filtration,
+                'air_filtration',
+            );
+
+            const fanIcon = document.getElementById('intervention-fan-icon');
+            if (fanIcon) {
+                fanIcon.style.animation = fanOn
+                    ? 'fan-spin-tw 0.9s linear infinite'
+                    : 'none';
+            }
+
+            if (foot) {
+                const ts = payload.timestamp
+                    ? parseUtcTimestamp(payload.timestamp)
+                    : null;
+                const shown = ts && !Number.isNaN(ts.getTime())
+                    ? ts.toLocaleString()
+                    : '—';
+                const devS = payload.dev_simulation || {};
+                const simHint = (
+                    devS.force_high_temperature === true
+                    || devS.force_high_noise === true
+                    || devS.force_low_temperature === true
+                    || devS.force_voc_spike === true
+                )
+                    ? ' · demo simulation overrides on'
+                    : '';
+                foot.innerText = `Last sync: ${shown} (from /api/simulated-room)${simHint}.`;
+            }
+        } catch (err) {
+            console.error('Failed to refresh system intervention status:', err);
+            if (foot) {
+                foot.innerText = 'Could not load intervention state from /api/simulated-room.';
+            }
+        }
+    }
+
+    const READINESS_VAL_SCORED =
+        'mt-2 text-6xl font-extrabold tracking-tight text-transparent bg-gradient-to-br from-amber-200 via-[#d4af37] to-amber-600 bg-clip-text sm:text-7xl transition-all duration-300';
+    const READINESS_VAL_EMPTY =
+        'mt-2 text-6xl font-extrabold tracking-tight text-zinc-600 sm:text-7xl transition-all duration-300';
+
+    async function loadReadinessHero() {
+        const valEl = document.getElementById('oura-readiness-value');
+        const subEl = document.getElementById('oura-readiness-sub');
+        if (!valEl || !subEl) return;
+        try {
+            const res = await fetch('/api/sleep-readiness/latest');
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Request failed');
+            }
+            const sc = data.score;
+            if (!sc || sc.readiness_score === null || sc.readiness_score === undefined) {
+                valEl.textContent = '—';
+                valEl.className = READINESS_VAL_EMPTY;
+                subEl.textContent = 'No scored session yet — complete ASLEEP→AWAKE';
+                return;
+            }
+            valEl.className = READINESS_VAL_SCORED;
+            valEl.textContent = String(Math.round(Number(sc.readiness_score)));
+            subEl.textContent = sc.score_date
+                ? `Wake day (UTC) ${sc.score_date}`
+                : 'Latest scored session';
+        } catch (e) {
+            valEl.textContent = '—';
+            valEl.className = READINESS_VAL_EMPTY;
+            subEl.textContent = 'Could not load readiness';
+        }
+    }
+
+    attachComfortSliderHandlers();
+    initializeConfigPanel();
+    initializeMorningReviewCard();
+    initializeSunriseCard();
+    (function bindWakeMinutesPreview() {
+        const wt = document.getElementById('cfg-wake-time');
+        if (!wt) return;
+        let idle;
+        const bump = () => {
+            window.clearTimeout(idle);
+            idle = window.setTimeout(() => updateMinutesToWakeDisplay(), 80);
+        };
+        wt.addEventListener('input', bump);
+        wt.addEventListener('change', bump);
+    })();
+    loadReadinessHero();
+    setInterval(loadReadinessHero, 60000);
+    refreshSunriseSequence();
+    setTimeout(() => tickSunriseRealtimePrelude(), 0);
+    refreshSystemInterventionStatus();
+    setInterval(refreshSunriseSequence, 10000);
+    setInterval(tickSunriseRealtimePrelude, 60000);
+    setInterval(refreshSystemInterventionStatus, 5000);
+    (function initDevSimulationToggles() {
+        const dt = document.getElementById('dev-force-high-temp');
+        const dn = document.getElementById('dev-force-high-noise');
+        const dl = document.getElementById('dev-force-low-temp');
+        const dv = document.getElementById('dev-force-voc-spike');
+        [dt, dn, dl, dv].forEach((el) => {
+            if (el) el.addEventListener('change', () => postDevSimulationToggles());
+        });
+    })();
+
+    (function initSleepCoachChat() {
+        const fab = document.getElementById('sleep-coach-fab');
+        const panel = document.getElementById('sleep-coach-panel');
+        const closeBtn = document.getElementById('sleep-coach-close');
+        const messagesEl = document.getElementById('sleep-coach-messages');
+        const inputEl = document.getElementById('sleep-coach-input');
+        const sendBtn = document.getElementById('sleep-coach-send');
+        if (!fab || !panel || !messagesEl || !inputEl || !sendBtn) return;
+
+        function scrollSleepCoachToBottom() {
+            window.requestAnimationFrame(() => {
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            });
+        }
+
+        function sleepCoachMarkdownToHtml(src) {
+            const raw = String(src ?? '');
+            try {
+                if (typeof marked !== 'undefined' && marked != null) {
+                    const parsed = typeof marked.parse === 'function'
+                        ? marked.parse(raw)
+                        : (typeof marked === 'function' ? marked(raw) : '');
+                    if (typeof parsed === 'string' && parsed.trim()) {
+                        return parsed;
+                    }
+                }
+            } catch (e) {
+                console.warn('Sleep Coach markdown parse failed:', e);
+            }
+            const esc = document.createElement('div');
+            esc.textContent = raw;
+            return `<p class="my-1">${esc.innerHTML}</p>`;
+        }
+
+        function appendMessage(sender, text) {
+            const wrap = document.createElement('div');
+            wrap.className = sender === 'user' ? 'flex justify-end' : 'flex justify-start';
+
+            const userGlow =
+                'border border-teal-400/40 bg-gradient-to-br from-teal-500/25 '
+                + 'via-oura-mint/18 to-amber-500/15 text-zinc-100 '
+                + 'shadow-[0_0_20px_rgba(126,242,197,0.12)] ring-1 ring-teal-400/25';
+            const aiMuted =
+                'border border-zinc-600/45 bg-zinc-800/90 shadow-inner shadow-black/30';
+
+            const bubble = document.createElement('div');
+
+            if (sender === 'user') {
+                bubble.className =
+                    `max-w-[85%] break-words rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${userGlow}`;
+                bubble.textContent = text;
+            } else {
+                bubble.className =
+                    `max-w-[85%] min-w-0 break-words rounded-2xl px-3 py-2 ${aiMuted}`;
+                const prose = document.createElement('div');
+                prose.className =
+                    'prose prose-invert prose-sm max-w-none text-gray-200';
+                prose.innerHTML = sleepCoachMarkdownToHtml(text);
+                bubble.appendChild(prose);
+            }
+
+            wrap.appendChild(bubble);
+            messagesEl.appendChild(wrap);
+            scrollSleepCoachToBottom();
+        }
+
+        function removeThinkingIndicator() {
+            document.getElementById('sleep-coach-thinking')?.remove();
+        }
+
+        function showThinkingIndicator() {
+            removeThinkingIndicator();
+            const wrap = document.createElement('div');
+            wrap.id = 'sleep-coach-thinking';
+            wrap.className = 'flex justify-start';
+            const bubble = document.createElement('div');
+            bubble.className =
+                'max-w-[85%] rounded-2xl border border-white/10 bg-zinc-900/65 px-3 '
+                + 'py-2 text-sm italic text-zinc-500';
+            bubble.textContent = 'Thinking...';
+            wrap.appendChild(bubble);
+            messagesEl.appendChild(wrap);
+            scrollSleepCoachToBottom();
+        }
+
+        function setCoachOpen(open) {
+            panel.classList.toggle('hidden', !open);
+            fab.setAttribute('aria-expanded', open ? 'true' : 'false');
+            fab.setAttribute(
+                'aria-label',
+                open ? 'Close Sleep Coach' : 'Open Sleep Coach',
+            );
+            if (open) {
+                window.setTimeout(() => inputEl.focus(), 100);
+                scrollSleepCoachToBottom();
+            }
+        }
+
+        fab.addEventListener('click', () => {
+            setCoachOpen(panel.classList.contains('hidden'));
+        });
+        closeBtn?.addEventListener('click', () => setCoachOpen(false));
+
+        async function sendMessage() {
+            const text = String(inputEl.value || '').trim();
+            if (!text) return;
+
+            appendMessage('user', text);
+            inputEl.value = '';
+            showThinkingIndicator();
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/sleep-coach', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ message: text }),
+                });
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (parseErr) {
+                    data = {};
+                }
+                removeThinkingIndicator();
+
+                if (!response.ok) {
+                    const err =
+                        (typeof data.error === 'string' && data.error)
+                        || `${response.status} ${response.statusText || 'Request failed'}`;
+                    appendMessage('assistant', err);
+                    return;
+                }
+                const rec = data.recommendation;
+                appendMessage(
+                    'assistant',
+                    rec && String(rec).trim()
+                        ? String(rec).trim()
+                        : '(No recommendation returned.)',
+                );
+            } catch (err) {
+                removeThinkingIndicator();
+                appendMessage(
+                    'assistant',
+                    err && err.message
+                        ? err.message
+                        : 'Network error. Check your connection and try again.',
+                );
+            } finally {
+                sendBtn.disabled = false;
+                scrollSleepCoachToBottom();
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    })();
+</script>
+
+
+{% endblock %}

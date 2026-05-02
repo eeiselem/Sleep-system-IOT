@@ -1,0 +1,10 @@
+python-dotenv
+Flask
+Flask-Bcrypt
+Flask-Login
+Flask-SQLAlchemy
+requests
+openai>=1.0.0
+pycryptodome>=3.19.0
+pydantic>=2.0.0
+pyopenssl>=23.0.0
