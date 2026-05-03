@@ -10,14 +10,14 @@
 #include "mbedtls/base64.h"   // Base64
 
 // Wi-Fi credentials
-const String ssid = "Gupta";           // WiFi SSID
-const String password = "bindigupta";  // WiFi password
+const String ssid = "YOUR_SSID";           // WiFi SSID
+const String password = "YOUR_PASSWORD";  // WiFi password
 
 // Wi-Fi mode
 wifi_mode_t wifi_mode = WIFI_STA;  // WiFi connection type
 
 // Server config
-const String server_url = "http://172.20.10.3:8888";  // Server url; update from running server file output
+const String server_url = "YOUR_SERVER_IP";  // Server url; update from running server file output
 
 // AES-128-CBC Configuration
 // 16 bytes (128 bits) key and IV. Must match the Python server for decoding.
