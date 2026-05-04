@@ -54,19 +54,27 @@ def readings_context_anonymized_for_llm(
         rows = rows[::stride][:llm_budget_rows]
     readings = []
     for r in rows:
-        readings.append(
-            {
-                "timestamp": utc_isoformat_z(to_utc_datetime(r.timestamp)),
-                "temperature_c": to_float_or_none(r.temperature),
-                "humidity_pct": to_float_or_none(r.humidity),
-                "air_quality_index": to_float_or_none(r.air_quality),
-                "ambient_noise_db": to_float_or_none(r.ambient_noise),
-                "ambient_light_lux": to_float_or_none(r.ambient_light),
-                "heart_rate_bpm": to_float_or_none(r.heart_rate),
-                "spo2_pct": to_float_or_none(r.spo2),
-                "gyro_variance": to_float_or_none(r.gyro_variance),
-            }
-        )
+        point = {
+            "timestamp": utc_isoformat_z(to_utc_datetime(r.timestamp)),
+            "temperature_c": to_float_or_none(r.temperature),
+            "humidity_pct": to_float_or_none(r.humidity),
+            "air_quality_index": to_float_or_none(r.air_quality),
+            "ambient_noise_db": to_float_or_none(r.ambient_noise),
+            "ambient_light_lux": to_float_or_none(r.ambient_light),
+            "heart_rate_bpm": to_float_or_none(r.heart_rate),
+            "spo2_pct": to_float_or_none(r.spo2),
+            "gyro_variance": to_float_or_none(r.gyro_variance),
+        }
+        # Compact context: remove missing keys and round numeric payload.
+        compact = {}
+        for k, v in point.items():
+            if v is None:
+                continue
+            if isinstance(v, float):
+                compact[k] = round(v, 2)
+            else:
+                compact[k] = v
+        readings.append(compact)
     return {
         "window_days": days,
         "sample_rows_returned": len(readings),

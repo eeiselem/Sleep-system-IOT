@@ -235,6 +235,39 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return Number.isInteger(n) ? String(Math.round(n)) : String(Number(n.toFixed(2)));
     }
 
+    /**
+     * Air-quality score normalization for dashboard UX:
+     * - scale is 1-100 where 100 is best (cleaner air)
+     * - raw device index may exceed 100; normalize into this score range.
+     */
+    function normalizeAirQualityScore(val) {
+        const n = Number(val);
+        if (!Number.isFinite(n)) return null;
+        // Treat lower raw index as cleaner; invert to score where higher is better.
+        const clamped = Math.max(0, Math.min(500, n));
+        return Math.max(1, Math.min(100, Math.round(100 - ((clamped / 500) * 99))));
+    }
+
+    function formatLiveAqiDisplay(val) {
+        if (val === null || val === undefined || val === 'N/A') return '-';
+        const s = String(val).trim();
+        if (!s || s.toUpperCase() === 'N/A') return '-';
+        if (/error/i.test(s)) {
+            const sl = s.toLowerCase();
+            if (
+                sl.includes('decod')
+                || sl.includes('padding')
+                || sl.includes('decrypt')
+                || sl.includes('base64')
+            ) {
+                return 'Encrypting…';
+            }
+            return '-';
+        }
+        const score = normalizeAirQualityScore(s);
+        return score === null ? '-' : String(score);
+    }
+
     /** Live API temperature is stored as °C; dashboard shows °F. */
     function formatLiveTemperatureFahrenheit(val) {
         if (val === null || val === undefined || val === 'N/A') return '-';
@@ -265,16 +298,165 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         red: 'temp-val dash-temp-tier-red',
     };
 
+    /** Numeric live reading for tiering (null if missing, error, or non-numeric). */
+    function parseLiveReadingNumber(val) {
+        if (!liveMetricHasReadableValue(val)) return null;
+        const s = String(val).trim();
+        if (/error/i.test(s)) return null;
+        if (/encrypting/i.test(s)) return null;
+        const n = Number(s);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function setLiveMetricValueTier(el, tier) {
+        if (!el) return;
+        const t = ['ok', 'amber', 'red', 'neutral'].includes(tier) ? tier : 'neutral';
+        el.classList.add('dash-metric-val');
+        el.classList.remove(
+            'dash-metric-tier-ok',
+            'dash-metric-tier-amber',
+            'dash-metric-tier-red',
+            'dash-metric-tier-neutral',
+        );
+        el.classList.add(`dash-metric-tier-${t}`);
+    }
+
+    function tierHumidityPct(n) {
+        if (n >= 40 && n <= 60) return 'ok';
+        if ((n >= 30 && n <= 39) || (n >= 61 && n <= 70)) return 'amber';
+        return 'red';
+    }
+
+    /** Broad asleep/rest baseline guardrails for visual management (not medical diagnosis). */
+    function tierHeartRateBpm(n) {
+        if (n >= 45 && n <= 65) return 'ok';
+        if ((n >= 35 && n < 45) || (n > 65 && n <= 80)) return 'amber';
+        return 'red';
+    }
+
+    function tierSpo2Pct(n) {
+        if (n >= 95) return 'ok';
+        if (n >= 93) return 'amber';
+        return 'red';
+    }
+
+    function tierNoiseDb(n) {
+        if (n < 40) return 'ok';
+        if (n <= 50) return 'amber';
+        return 'red';
+    }
+
+    /** Air-quality score bands on 1-100 scale (higher is better). */
+    function tierAirQualityIndex(n) {
+        if (n >= 75) return 'ok';
+        if (n >= 50) return 'amber';
+        return 'red';
+    }
+
+    /** Higher restful score is better (stillness). */
+    function tierRestfulScore(n) {
+        if (n >= 85) return 'ok';
+        if (n >= 70) return 'amber';
+        return 'red';
+    }
+
+    /** Lower lux is better for sleep. */
+    function tierLuxSleep(n) {
+        if (n < 2) return 'ok';
+        if (n <= 40) return 'amber';
+        return 'red';
+    }
+
+    function updateLiveMetricValueTiers(data) {
+        if (!data || typeof data !== 'object') return;
+
+        const hEl = document.getElementById('live-humidity') || document.querySelector('.hum-val');
+        const hn = parseLiveReadingNumber(data.humidity);
+        if (hEl) {
+            if (hn === null) setLiveMetricValueTier(hEl, 'neutral');
+            else setLiveMetricValueTier(hEl, tierHumidityPct(hn));
+        }
+
+        const hr = document.getElementById('live-heart-rate');
+        const hrn = parseLiveReadingNumber(data.heart_rate);
+        if (hr) {
+            if (hrn === null) setLiveMetricValueTier(hr, 'neutral');
+            else setLiveMetricValueTier(hr, tierHeartRateBpm(hrn));
+        }
+
+        const sp = document.getElementById('live-spo2');
+        const spn = parseLiveReadingNumber(data.spo2);
+        if (sp) {
+            if (spn === null) setLiveMetricValueTier(sp, 'neutral');
+            else setLiveMetricValueTier(sp, tierSpo2Pct(spn));
+        }
+
+        const nz = document.getElementById('live-ambient-noise');
+        const nzn = parseLiveReadingNumber(data.ambient_noise);
+        if (nz) {
+            if (nzn === null) setLiveMetricValueTier(nz, 'neutral');
+            else setLiveMetricValueTier(nz, tierNoiseDb(nzn));
+        }
+
+        const voc = document.getElementById('live-voc');
+        const vnRaw = parseLiveReadingNumber(data.air_quality);
+        const vn = vnRaw === null ? null : normalizeAirQualityScore(vnRaw);
+        if (voc) {
+            if (vn === null) setLiveMetricValueTier(voc, 'neutral');
+            else setLiveMetricValueTier(voc, tierAirQualityIndex(vn));
+        }
+
+        const lux = document.getElementById('live-lumens');
+        const ln = parseLiveReadingNumber(data.ambient_light);
+        if (lux) {
+            if (ln === null) setLiveMetricValueTier(lux, 'neutral');
+            else setLiveMetricValueTier(lux, tierLuxSleep(ln));
+        }
+
+        const rl = document.getElementById('live-restlessness');
+        const rn = parseLiveReadingNumber(data.restlessness_score);
+        if (rl) {
+            if (rn === null) setLiveMetricValueTier(rl, 'neutral');
+            else setLiveMetricValueTier(rl, tierRestfulScore(rn));
+        }
+    }
+
+    function formatLastReceivedLine(d) {
+        if (!d || Number.isNaN(d.getTime())) return null;
+        const short = d.toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+        });
+        return { text: `Last: ${short}`, title: d.toLocaleString() };
+    }
+
     function formatMetricAgeLine(iso, hasValue) {
+        const parsed = iso ? parseUtcTimestamp(iso) : null;
+        const d = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+
         if (!hasValue) {
-            return { text: '-', title: 'No samples yet', delayed: false, offline: false };
+            if (d) {
+                const last = formatLastReceivedLine(d);
+                if (last) {
+                    return {
+                        text: last.text,
+                        title: last.title,
+                        delayed: false,
+                        offline: false,
+                    };
+                }
+            }
+            return { text: 'No data', title: 'No samples yet', delayed: false, offline: false };
         }
-        if (!iso) {
-            return { text: '-', title: '', delayed: false, offline: false };
-        }
-        const d = parseUtcTimestamp(iso);
-        if (!d || Number.isNaN(d.getTime())) {
-            return { text: '-', title: '', delayed: false, offline: false };
+        if (!iso || !d) {
+            return {
+                text: '-',
+                title: 'Last received time not available',
+                delayed: false,
+                offline: false,
+            };
         }
         const now = Date.now();
         const delta = Math.max(0, now - d.getTime());
@@ -293,7 +475,13 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
             return { text: `${m}m ago · catching up`, title, delayed: false, offline: false };
         }
         if (delta >= LIVE_OFFLINE_MS) {
-            return { text: 'Offline', title, delayed: false, offline: true };
+            const last = formatLastReceivedLine(d);
+            return {
+                text: last ? last.text : 'No data',
+                title,
+                delayed: false,
+                offline: true,
+            };
         }
         const m = Math.floor(delta / 60000);
         const h = Math.floor(delta / 3600000);
@@ -320,15 +508,21 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
     function setLiveReadingsNoDataState() {
         clearAllLivePrimaryOfflineClasses();
         const t = document.querySelector('.temp-val');
-        const h = document.querySelector('.hum-val');
+        const h = document.getElementById('live-humidity') || document.querySelector('.hum-val');
         if (t) {
             t.innerText = '-';
             t.className = DASH_TEMP_TIER_CLASS.neutral;
         }
-        if (h) h.innerText = '-';
+        if (h) {
+            h.innerText = '-';
+            setLiveMetricValueTier(h, 'neutral');
+        }
         ['live-heart-rate', 'live-spo2', 'live-ambient-noise', 'live-voc', 'live-lumens', 'live-restlessness'].forEach((id) => {
             const el = document.getElementById(id);
-            if (el) el.innerText = '-';
+            if (el) {
+                el.innerText = '-';
+                setLiveMetricValueTier(el, 'neutral');
+            }
         });
         [
             'live-age-temperature',
@@ -342,7 +536,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) {
-                el.textContent = '-';
+                el.textContent = 'No data';
                 el.title = 'No samples yet';
                 el.classList.remove('live-metric-age--delayed', 'live-metric-age--offline');
             }
@@ -358,7 +552,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         }
 
         const tEl = document.querySelector('.temp-val');
-        const hEl = document.querySelector('.hum-val');
+        const hEl = document.getElementById('live-humidity') || document.querySelector('.hum-val');
         if (tEl) tEl.innerText = formatLiveTemperatureFahrenheit(data.temperature);
         if (hEl) hEl.innerText = formatLiveReadingMetric(data.humidity, '%');
 
@@ -370,7 +564,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         if (hr) hr.innerText = formatLiveReadingMetric(data.heart_rate, 'bpm');
         if (sp) sp.innerText = formatLiveReadingMetric(data.spo2, '%');
         if (nz) nz.innerText = formatLiveReadingMetric(data.ambient_noise, 'dB');
-        if (voc) voc.innerText = formatLiveReadingMetric(data.air_quality, '');
+        if (voc) voc.innerText = formatLiveAqiDisplay(data.air_quality);
         if (lux) lux.innerText = formatLiveReadingMetric(data.ambient_light, '');
         const rl = document.getElementById('live-restlessness');
         if (rl) rl.innerText = formatLiveReadingMetric(data.restlessness_score, '');
@@ -383,6 +577,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         setMetricAgeElement('live-age-voc', data.air_quality_updated_at, data.air_quality);
         setMetricAgeElement('live-age-lumens', data.ambient_light_updated_at, data.ambient_light);
         setMetricAgeElement('live-age-restlessness', data.restlessness_score_updated_at, data.restlessness_score);
+        updateLiveMetricValueTiers(data);
         updateTemperatureComfortFromCache();
     }
 

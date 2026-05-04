@@ -25,5 +25,6 @@ class SleepSession(db.Model):
     spo2_drop_count = db.Column(db.Integer, nullable=True)
     noise_spike_count = db.Column(db.Integer, nullable=True)
     disturbance_score = db.Column(db.Float, nullable=True)
+    environment_stability_score = db.Column(db.Float, nullable=True)
     sample_count = db.Column(db.Integer, nullable=True)
     calculated_at = db.Column(db.DateTime(timezone=True), nullable=True)

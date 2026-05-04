@@ -160,10 +160,10 @@
                 </div>
                 <div class="dash-metric-tile">
                     <dt class="dash-metric-tile__head">
-                        <span class="dash-metric-tile__label">Air quality index</span>
-                        <span class="dash-metric-tile__tip-wrap">{{ metric_info_tip('About air quality index', 'Single device index from your gas / VOC-type sensor channel (e.g. MQ-135 style). It is not an official government AQI; lower values mean cleaner air at the sensor, higher values mean more contamination detected. Optimal: 0-50 (Good). High AQI can disrupt respiration and HRV.') }}</span>
+                        <span class="dash-metric-tile__label">Air quality score</span>
+                        <span class="dash-metric-tile__tip-wrap">{{ metric_info_tip('About air quality score', 'Single device score derived from your gas / VOC-type sensor channel (e.g. MQ-135 style). Scale: 1-100 where 100 is best and cleaner air. Lower scores indicate poorer air quality and may disrupt breathing and recovery.') }}</span>
                     </dt>
-                    <dd class="dash-metric-tile__value"><span id="live-voc" class="dash-metric-val dash-metric-tier-neutral">{{ display_live_metric(current_voc) }}</span></dd>
+                    <dd class="dash-metric-tile__value"><span id="live-voc" class="dash-metric-val dash-metric-tier-neutral">{{ display_live_metric(current_voc) }}</span><span class="text-zinc-500"> /100</span></dd>
                     <dd id="live-age-voc" class="live-metric-age text-[10px] text-zinc-500" title=""></dd>
                 </div>
                 <div class="dash-metric-tile">
@@ -545,7 +545,7 @@
                 {{ sleep_chart('SpO₂', 'About this SpO₂ chart', 'SpO₂ is blood oxygen saturation. For healthy adults at rest, 95% or higher is typically normal; consistently lower values warrant medical attention.', 'sleep-wrap-spo2', 'sleepChartSpo2') }}
                 {{ sleep_chart('HRV / PRV', 'About this HRV / PRV chart', 'HRV (heart rate variability) and PRV (pulse rate variability) describe beat-to-beat timing variation. Higher resting variability is often associated with recovery; trends are more useful than single-night absolutes.', 'sleep-wrap-prv_ms', 'sleepChartPrv') }}
                 {{ sleep_chart('Room light', 'About this light chart', 'Mapped from the room light sensor. Values are shown in lux, a measure of illuminance at the sensor (not total fixture lumens).', 'sleep-wrap-ambient_light', 'sleepChartLight') }}
-                {{ sleep_chart('Air quality index', 'About this air quality chart', 'Single device index from your gas / VOC-type sensor channel (e.g. MQ-135 style). It is not an official government AQI; lower values mean cleaner air at the sensor, higher values mean more contamination detected.', 'sleep-wrap-voc', 'sleepChartVoc') }}
+                {{ sleep_chart('Air quality score', 'About this air quality chart', 'Single device score derived from your gas / VOC-type sensor channel (e.g. MQ-135 style). Scale: 1-100 where 100 is best and cleaner air. Lower scores indicate poorer air quality and may disrupt breathing and recovery.', 'sleep-wrap-voc', 'sleepChartVoc') }}
                 {{ sleep_chart('Ambient noise', 'About this noise chart', 'Sound level in dB at the sensor during the sleep window. Sustained highs or sharp spikes can track disturbances that may line up with movement or arousals on other timelines.', 'sleep-wrap-ambient_noise', 'sleepChartNoise') }}
                 {{ sleep_chart('Restful efficiency', 'About this restful efficiency chart', 'Restful efficiency (0 to 100) is a positive-health motion score: 100 = very still / restful, 0 = high movement. Bands: 80 to 100 excellent; 50 to 79 moderate; under 50 restless.', 'sleep-wrap-gyro_variance', 'sleepChartGyro') }}
             </div>

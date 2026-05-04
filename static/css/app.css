@@ -949,6 +949,18 @@ body.app-shell .card ul {
     body.app-shell.app-dashboard .dash-card--trans {
         transition: all 0.3s ease;
     }
+    /*
+     * Side-by-side layout: metric (i) bubbles extend past the card edge. The review card
+     * comes later in the DOM and would otherwise paint on top and hide those tooltips.
+     */
+    body.app-shell.app-dashboard #live-conditions-card {
+        position: relative;
+        z-index: 2;
+    }
+    body.app-shell.app-dashboard #morning-review-card {
+        position: relative;
+        z-index: 1;
+    }
     body.app-shell.app-dashboard .dash-card--wide {
         width: 100%;
     }
@@ -1149,6 +1161,18 @@ body.app-shell .card ul {
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         color: #e4e4e7;
+    }
+    body.app-shell.app-dashboard .dash-metric-val.dash-metric-tier-neutral {
+        color: #d4d4d8;
+    }
+    body.app-shell.app-dashboard .dash-metric-val.dash-metric-tier-ok {
+        color: #6ee7b7;
+    }
+    body.app-shell.app-dashboard .dash-metric-val.dash-metric-tier-amber {
+        color: #fcd34d;
+    }
+    body.app-shell.app-dashboard .dash-metric-val.dash-metric-tier-red {
+        color: #fca5a5;
     }
     body.app-shell.app-dashboard .dash-dev-scenario {
         min-height: 44px;

@@ -354,7 +354,7 @@ def api_sleep_coach():
         return {"error": "OPENAI_API_KEY is not set"}, 503
 
     anonymized_bundle = readings_context_anonymized_for_llm(
-        days=7, limit=2500, user_id=current_user.id,
+        days=5, limit=900, llm_budget_rows=450, user_id=current_user.id,
     )
     coach_model = (
         (os.getenv("OPENAI_SLEEP_COACH_MODEL") or "gpt-4o-mini").strip()
@@ -381,7 +381,7 @@ def api_sleep_coach():
         "concerning, state it succinctly as a reason to seek professional advice."
     )
     serialized_ctx = json.dumps(anonymized_bundle)
-    max_ctx_chars = min(340_000, int(os.getenv("SLEEP_COACH_CONTEXT_CHARS", "340000")))
+    max_ctx_chars = min(90_000, int(os.getenv("SLEEP_COACH_CONTEXT_CHARS", "90000")))
     if len(serialized_ctx) > max_ctx_chars:
         serialized_ctx = serialized_ctx[:max_ctx_chars] + "…truncated-for-token-cap"
 
@@ -436,6 +436,7 @@ def _serialize_sleep_session_score(row):
         "spo2_drop_count": row.spo2_drop_count,
         "noise_spike_count": row.noise_spike_count,
         "disturbance_score": row.disturbance_score,
+        "environment_stability_score": row.environment_stability_score,
         "sample_count": row.sample_count,
         "calculated_at": (
             utc_isoformat_z(row.calculated_at)

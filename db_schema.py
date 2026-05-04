@@ -81,7 +81,14 @@ def ensure_sleep_session_columns():
     }
     if "user_id" not in existing_columns:
         db.session.execute(text("ALTER TABLE sleep_sessions ADD COLUMN user_id INTEGER"))
-        db.session.commit()
+    if "environment_stability_score" not in existing_columns:
+        db.session.execute(
+            text(
+                "ALTER TABLE sleep_sessions ADD COLUMN "
+                "environment_stability_score REAL"
+            )
+        )
+    db.session.commit()
 
 
 def ensure_user_config_columns():

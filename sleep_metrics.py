@@ -11,8 +11,8 @@ from crud.reading import read_sleep_session_between
 from utils import get_current_utc_time, restlessness_score_from_raw
 
 # Audit label for subjective-vs-algorithm discrepancy rows; must match the blend in
-# ``compute_sleep_readiness_for_session`` (0.45 / 0.35 / 0.20).
-READINESS_SCORE_FORMULA_VERSION = "0.45*eff + 0.35*prv + 0.20*dist_v1"
+# ``compute_sleep_readiness_for_session`` (0.40 / 0.40 / 0.20).
+READINESS_SCORE_FORMULA_VERSION = "0.40*eff + 0.40*hrv_hr + 0.20*spo2_v2"
 
 
 def _to_float(value):
@@ -22,6 +22,94 @@ def _to_float(value):
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _mean(values: List[Optional[float]]) -> Optional[float]:
+    clean = [v for v in values if v is not None]
+    if not clean:
+        return None
+    return sum(clean) / len(clean)
+
+
+def _map_linear_clamped(value: float, low: float, high: float) -> float:
+    if high <= low:
+        return 0.0
+    pct = ((value - low) / (high - low)) * 100.0
+    return min(max(pct, 0.0), 100.0)
+
+
+def _score_environment_stability(readings: List[Reading]) -> float:
+    """
+    Internal-only environmental stability score (0-100), separate from readiness.
+
+    Uses four environmental channels:
+    - Temperature (°F): optimal 60-75, warning 55-80
+    - Ambient noise (dB): optimal <40, warning <=50
+    - Ambient light (lux): optimal <2, warning <=40
+    - Air quality index: optimal 0-50, warning <=100
+    """
+
+    def score_temp_f(v_f: float) -> float:
+        if 60.0 <= v_f <= 75.0:
+            return 100.0
+        if 55.0 <= v_f <= 80.0:
+            return 60.0
+        return 20.0
+
+    def score_noise_db(v: float) -> float:
+        if v < 40.0:
+            return 100.0
+        if v <= 50.0:
+            return 60.0
+        return 20.0
+
+    def score_lux(v: float) -> float:
+        if v < 2.0:
+            return 100.0
+        if v <= 40.0:
+            return 60.0
+        return 20.0
+
+    def score_aqi(v: float) -> float:
+        if 0.0 <= v <= 50.0:
+            return 100.0
+        if v <= 100.0:
+            return 60.0
+        return 20.0
+
+    temp_scores: List[float] = []
+    noise_scores: List[float] = []
+    light_scores: List[float] = []
+    aqi_scores: List[float] = []
+
+    for r in readings:
+        t_c = _to_float(r.temperature)
+        if t_c is not None:
+            t_f = (t_c * (9.0 / 5.0)) + 32.0
+            temp_scores.append(score_temp_f(t_f))
+
+        nz = _to_float(r.ambient_noise)
+        if nz is not None:
+            noise_scores.append(score_noise_db(nz))
+
+        lx = _to_float(r.ambient_light)
+        if lx is not None:
+            light_scores.append(score_lux(lx))
+
+        aq = _to_float(r.air_quality)
+        if aq is not None:
+            aqi_scores.append(score_aqi(aq))
+
+    channel_means = [
+        _mean(temp_scores),
+        _mean(noise_scores),
+        _mean(light_scores),
+        _mean(aqi_scores),
+    ]
+    channel_means = [m for m in channel_means if m is not None]
+    if not channel_means:
+        return 0.0
+    return min(max(sum(channel_means) / len(channel_means), 0.0), 100.0)
 
 
 def readings_for_sleep_session(sess: SleepSession) -> List[Reading]:
@@ -65,6 +153,7 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
         sess.spo2_drop_count = 0
         sess.noise_spike_count = 0
         sess.disturbance_score = 0.0
+        sess.environment_stability_score = 0.0
         sess.sample_count = 0
         sess.calculated_at = get_current_utc_time()
         db.session.commit()
@@ -102,10 +191,11 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
     prv_score = min(max((avg_prv_ms / 120.0) * 100.0, 0.0), 100.0)
 
     spo2_values = [_to_float(r.spo2) for r in readings]
-    spo2_drop_count = sum(
-        1 for v in spo2_values
-        if v is not None and v < 92.0
-    )
+    clean_spo2_values = [v for v in spo2_values if v is not None]
+    avg_spo2 = _mean(clean_spo2_values) or 0.0
+    # Physiological SpO2 score: 97+ ~= 100, 88 ~= 0, clamped.
+    spo2_score = _map_linear_clamped(avg_spo2, 88.0, 97.0)
+    spo2_drop_count = sum(1 for v in clean_spo2_values if v < 92.0)
 
     noise_values = [_to_float(r.ambient_noise) for r in readings]
     noise_values = [v for v in noise_values if v is not None]
@@ -121,29 +211,49 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
 
     disturbance_events = spo2_drop_count + noise_spike_count
     disturbance_penalty = min(disturbance_events * 5.0, 100.0)
+    # Kept for backward-compatible telemetry fields; no longer used in readiness blend.
     disturbance_score = 100.0 - disturbance_penalty
+    environment_stability_score = _score_environment_stability(readings)
+
+    # Heart-rate score from session mean sleeping HR; combines with PRV as requested.
+    avg_hr = _mean(
+        [
+            hr
+            for hr in heart_rates
+            if hr is not None and 30.0 <= hr <= 200.0
+        ]
+    ) or 0.0
+    # 45-65 bpm is optimal, 35-80 warning, outside -> low score.
+    if 45.0 <= avg_hr <= 65.0:
+        heart_rate_score = 100.0
+    elif 35.0 <= avg_hr <= 80.0:
+        heart_rate_score = 60.0
+    else:
+        heart_rate_score = 20.0
+    hrv_heart_score = (prv_score + heart_rate_score) / 2.0
 
     # --- Sleep score (readiness_score) — weighted blend (all sub-scores are 0–100, higher is better) ---
     #
-    #   • 45% — sleep_efficiency_score (= sleep_efficiency_pct after clamp). sleep_efficiency_pct is the
+    #   • 40% — sleep_efficiency_score (= sleep_efficiency_pct after clamp). sleep_efficiency_pct is the
     #           percentage of gyro samples in the session whose **restful efficiency** is ≥ 80
     #           (``utils.restlessness_score_from_raw``: 100 = still, 0 = restless).
     #
-    #   • 35% — prv_score from mean absolute beat-to-beat RR interval change (PRV-style): larger
-    #           average delta (ms) across consecutive valid HR samples → higher prv_score, capped by
-    #           ``prv_score = min(100, (avg_prv_ms / 120.0) * 100)``. Not HRV RMSSD from ECG; uses HR-derived RR steps only.
+    #   • 40% — HRV/Heart score, implemented as the mean of:
+    #           - PRV-derived variability score (``prv_score``), and
+    #           - average heart-rate band score for sleeping physiology.
     #
-    #   • 20% — disturbance_score: starts at 100; each SpO₂ sample below 92% or each ambient-noise spike
-    #           (> baseline + 8 dB) costs 5 points until a floor of 0 (``disturbance_penalty`` cap 100).
+    #   • 20% — SpO₂ score from session mean oxygen saturation.
     #
-    # Final: readiness_score = 0.45*sleep_efficiency_score + 0.35*prv_score + 0.20*disturbance_score,
-    # then clamped to [0, 100]. **Motion / restfulness is not a separate weighted term** — it feeds only the
-    # 45% bucket via the share of samples with restful efficiency ≥ 80.
+    # Environmental metrics (AQI, noise, lumens, temperature) are intentionally EXCLUDED
+    # from readiness and logged only to ``environment_stability_score`` for diagnostics.
+    #
+    # Final: readiness_score = 0.40*sleep_efficiency_score + 0.40*hrv_heart_score + 0.20*spo2_score,
+    # then clamped to [0, 100].
     #
     readiness_score = (
-        (0.45 * sleep_efficiency_score) +
-        (0.35 * prv_score) +
-        (0.20 * disturbance_score)
+        (0.40 * sleep_efficiency_score) +
+        (0.40 * hrv_heart_score) +
+        (0.20 * spo2_score)
     )
     readiness_score = round(min(max(readiness_score, 0.0), 100.0), 2)
 
@@ -155,6 +265,7 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
     sess.spo2_drop_count = spo2_drop_count
     sess.noise_spike_count = noise_spike_count
     sess.disturbance_score = round(disturbance_score, 2)
+    sess.environment_stability_score = round(environment_stability_score, 2)
     sess.sample_count = len(readings)
     sess.calculated_at = get_current_utc_time()
     db.session.commit()
