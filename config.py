@@ -13,7 +13,7 @@ class Config:
 
 ROOT = Path(__file__).resolve().parent
 
-# IEC-style sleep-environment guidance + luminaire night corridor (proposal defaults).
+# proposal defaults based on medical data sources
 SCI_TEMP_BAND_C_MIN = 15.0
 SCI_TEMP_BAND_C_MAX = 19.0
 SCI_HUMIDITY_PCT_MIN = 40.0
