@@ -14,6 +14,9 @@ class Reading(db.Model):
     # Primary Key: Unique ID for each database row
     id = db.Column(db.Integer, primary_key=True, index=True)
 
+    # Owning account (ESP ingest defaults to the first user row; seed assigns per user).
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+
     # timestamp of when the reading when a row is created
     timestamp = db.Column(
         db.DateTime(timezone=True),
@@ -21,14 +24,15 @@ class Reading(db.Model):
     )
 
     # Private Database Columns: AES-256-GCM ciphertext (nonce||tag||ct, Base64).
-    _temperature = db.Column("temperature", db.String(512), nullable=False)
-    _humidity = db.Column("humidity", db.String(512), nullable=False)
+    _temperature = db.Column("temperature", db.String(512), nullable=True)
+    _humidity = db.Column("humidity", db.String(512), nullable=True)
     _air_quality = db.Column("air_quality", db.String(255), nullable=True)
     _ambient_noise = db.Column("ambient_noise", db.String(255), nullable=True)
     _heart_rate = db.Column("heart_rate", db.String(255), nullable=True)
     _spo2 = db.Column("spo2", db.String(255), nullable=True)
     _gyro_variance = db.Column("gyro_variance", db.String(255), nullable=True)
     _ambient_light = db.Column("ambient_light", db.String(255), nullable=True)
+    _hrv_rmssd = db.Column("hrv_rmssd", db.String(255), nullable=True)
 
     @property
     def temperature(self):
@@ -78,6 +82,12 @@ class Reading(db.Model):
             return None
         return decrypt_stored_reading_field(self._ambient_light)
 
+    @property
+    def hrv_rmssd(self):
+        if self._hrv_rmssd is None:
+            return None
+        return decrypt_stored_reading_field(self._hrv_rmssd)
+
     @temperature.setter
     def temperature(self, value):
         if value is None:
@@ -115,3 +125,7 @@ class Reading(db.Model):
     @ambient_light.setter
     def ambient_light(self, value):
         self._ambient_light = None if value is None else encrypt_at_rest(str(value))
+
+    @hrv_rmssd.setter
+    def hrv_rmssd(self, value):
+        self._hrv_rmssd = None if value is None else encrypt_at_rest(str(value))

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import threading
 from datetime import date, datetime, timedelta, timezone
-from statistics import pstdev
 from typing import Any, Dict, List, Optional, Tuple
+
+from sqlalchemy import or_
 
 from db import db
 from schemas.micro_arousal_event import MicroArousalEvent
@@ -32,19 +33,33 @@ def _utc_calendar_date(dt: datetime) -> date:
     return dt.astimezone(timezone.utc).date()
 
 
-def _latest_sleep_session_ended_on(cal_date: date) -> Optional[SleepSession]:
-    candidates = (
-        SleepSession.query.filter(SleepSession.ended_at.isnot(None))
-        .order_by(SleepSession.ended_at.desc())
-        .all()
+def default_ingest_user_id() -> Optional[int]:
+    """First user row (typical primary account) for unauthenticated device ingest."""
+    u = User.query.order_by(User.id.asc()).first()
+    return u.id if u else None
+
+
+def _latest_sleep_session_ended_on(
+    cal_date: date,
+    scoped_user_id: Optional[int] = None,
+) -> Optional[SleepSession]:
+    q = SleepSession.query.filter(SleepSession.ended_at.isnot(None)).order_by(
+        SleepSession.ended_at.desc(),
     )
+    if scoped_user_id is not None:
+        q = q.filter(SleepSession.user_id == scoped_user_id)
+    candidates = q.all()
     for s in candidates:
         if s.ended_at is not None and _utc_calendar_date(s.ended_at) == cal_date:
             return s
     return None
 
 
-def celsius_mean_between(window_start_utc: datetime, window_end_utc: datetime) -> Optional[float]:
+def celsius_mean_between(
+    window_start_utc: datetime,
+    window_end_utc: datetime,
+    user_id: Optional[int] = None,
+) -> Optional[float]:
     """Mean room temperature over [start, end] UTC inclusive, converted to °F (same units as before)."""
     if window_start_utc.tzinfo is None:
         window_start_utc = window_start_utc.replace(tzinfo=timezone.utc)
@@ -55,11 +70,13 @@ def celsius_mean_between(window_start_utc: datetime, window_end_utc: datetime) -
     else:
         window_end_utc = window_end_utc.astimezone(timezone.utc)
 
-    readings = (
+    rq = (
         Reading.query.filter(Reading.timestamp >= window_start_utc)
         .filter(Reading.timestamp <= window_end_utc)
-        .all()
     )
+    if user_id is not None:
+        rq = rq.filter(Reading.user_id == user_id)
+    readings = rq.all()
     vals = [_to_float(r.temperature) for r in readings]
     vals = [v for v in vals if v is not None]
     if not vals:
@@ -161,7 +178,7 @@ def update_optimal_band(user: User, score_date: date) -> Optional[dict]:
     if gmin >= gmax:
         return None
 
-    session_row = _latest_sleep_session_ended_on(score_date)
+    session_row = _latest_sleep_session_ended_on(score_date, user.id)
     if session_row is None or session_row.ended_at is None:
         return None
 
@@ -173,7 +190,11 @@ def update_optimal_band(user: User, score_date: date) -> Optional[dict]:
     alpha = alpha_from_sleep_readiness(readiness_value)
 
     t_center_old, half_w_old, span_old = _current_band_f(user)
-    night_f = celsius_mean_between(session_row.started_at, session_row.ended_at)
+    night_f = celsius_mean_between(
+        session_row.started_at,
+        session_row.ended_at,
+        user_id=user.id,
+    )
 
     mf = SubjectiveSleepReview.query.filter_by(
         user_id=user.id,
@@ -226,30 +247,23 @@ def run_daily_optimal_band_updates():
 
 
 # ---------------------------------------------------------------------------
-# Heuristic consciousness / sleep onset (gyro quiet + HR deceleration)
+# Sleep session detection (biometric stream present = in bed / ASLEEP)
 # ---------------------------------------------------------------------------
 
 sleep_state_lock = threading.Lock()
 
-# AWAKE → SETTLING → ASLEEP (heuristic); violent gyro snaps back to AWAKE.
+# AWAKE ⟷ ASLEEP: valid vitals (HR > 0, SpO₂ > 0) on a recent reading imply the
+# user is in bed with the biometric board; gaps longer than the stale threshold
+# imply wake / session end.
 current_user_state = "AWAKE"
 sleep_session_start_time = None
 # Primary key of the open ``sleep_sessions`` row while ASLEEP (None otherwise).
 active_sleep_session_id = None
 
-GYRO_VIOLENT_SPIKE = 0.28
-GYRO_SETTLE_MAX = 0.05
-SLEEP_LOOKBACK_MINUTES = 10
-SLEEP_SUSTAINED_MINUTES = 5
-SLEEP_WINDOW_NEED_SECONDS = (
-    max(295, int(SLEEP_SUSTAINED_MINUTES * 60) - 5)
-)
-
-RESTING_HR_LO = 50.0
-RESTING_HR_HI = 78.0
-HALVES_DECEL_MIN_BPM = 4.0
-RESTING_HALF_STDD_MAX = 6.0
-MIN_HR_SAMPLES_FOR_ASLEEP = 8
+# How far back to search for the most recent vitals-bearing reading.
+SLEEP_VITALS_LOOKBACK_MINUTES = 25
+# If the newest valid HR+SpO₂ sample is older than this, treat the stream as idle.
+BIOMETRIC_STALE_SECONDS = 600
 
 
 def _utc_isoformat_z(dt: Optional[datetime]) -> Optional[str]:
@@ -286,112 +300,75 @@ def snapshot_sleep_tracking() -> Dict[str, Any]:
         }
 
 
-def _read_rows_last_window(minutes_back: float) -> List[Dict[str, Any]]:
-    now = get_current_utc_time()
-    since = now - timedelta(minutes=minutes_back)
-    rows_db = (
-        Reading.query.filter(Reading.timestamp >= since)
-        .order_by(Reading.timestamp.asc())
-        .all()
+def _reading_has_positive_vitals(row: Reading) -> bool:
+    """Biometric stream: positive HR and SpO₂ (decoded floats)."""
+    hr = _to_float(row.heart_rate)
+    spo2 = _to_float(row.spo2)
+    return (
+        hr is not None
+        and spo2 is not None
+        and hr > 0.0
+        and spo2 > 0.0
     )
-    out = []
+
+
+def _latest_positive_vitals_timestamp() -> Optional[datetime]:
+    """
+    Timestamp of the newest reading in the lookback window that carries
+    positive vitals (skips environmental rows with NULL HR/SpO₂).
+    """
+    now = get_current_utc_time()
+    since = now - timedelta(minutes=SLEEP_VITALS_LOOKBACK_MINUTES)
+    rq = Reading.query.filter(Reading.timestamp >= since)
+    uid = default_ingest_user_id()
+    if uid is not None:
+        rq = rq.filter(or_(Reading.user_id == uid, Reading.user_id.is_(None)))
+    rows_db = rq.order_by(Reading.timestamp.desc(), Reading.id.desc()).all()
     for r in rows_db:
+        if not _reading_has_positive_vitals(r):
+            continue
         ts = r.timestamp
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        out.append(
-            {
-                "timestamp": ts,
-                "gyro": _to_float(r.gyro_variance),
-                "hr": _to_float(r.heart_rate),
-            }
-        )
-    return out
+        else:
+            ts = ts.astimezone(timezone.utc)
+        return ts
+    return None
 
 
-def _gyro_violent_spike(samples: List[Dict[str, Any]]) -> bool:
-    for pt in samples:
-        g = pt["gyro"]
-        if g is not None and g >= GYRO_VIOLENT_SPIKE:
-            return True
-    return False
-
-
-def _low_gyro_suffix_window_ok(samples: List[Dict[str, Any]]) -> bool:
-    """Last ``SLEEP_SUSTAINED_MINUTES`` contiguous window from latest sample."""
-
-    if not samples:
-        return False
-    t_end = samples[-1]["timestamp"]
-    cutoff = t_end - timedelta(minutes=SLEEP_SUSTAINED_MINUTES)
-    window = [pt for pt in samples if pt["timestamp"] >= cutoff]
-    if not window:
-        return False
-    span_sec = (
-        window[-1]["timestamp"] - window[0]["timestamp"]
-    ).total_seconds()
-    if span_sec < SLEEP_WINDOW_NEED_SECONDS:
-        return False
-    for pt in window:
-        g = pt["gyro"]
-        if g is None or g >= GYRO_SETTLE_MAX:
-            return False
-    return True
-
-
-def _hr_decelerating_and_stable_rest(samples: List[Dict[str, Any]]) -> bool:
-    """Last sustained window ending at latest stamp: halves + resting band."""
-
-    if not samples:
-        return False
-    t_end = samples[-1]["timestamp"]
-    cutoff = t_end - timedelta(minutes=SLEEP_SUSTAINED_MINUTES)
-    hrs = []
-    for pt in samples:
-        if pt["timestamp"] < cutoff:
-            continue
-        hr = pt["hr"]
-        if hr is None or not (38.0 <= hr <= 120.0):
-            continue
-        hrs.append(hr)
-
-    if len(hrs) < MIN_HR_SAMPLES_FOR_ASLEEP:
-        return False
-    mid = max(4, len(hrs) // 2)
-    if len(hrs) - mid < 4:
-        return False
-    first_half = hrs[:mid]
-    second_half = hrs[mid:]
-    avg_first = sum(first_half) / len(first_half)
-    avg_rest = sum(second_half) / len(second_half)
-    if avg_rest > RESTING_HR_HI or avg_rest < RESTING_HR_LO:
-        return False
-    std_rest = pstdev(second_half) if len(second_half) > 1 else 0.0
-    if avg_first <= avg_rest + HALVES_DECEL_MIN_BPM:
-        return False
-    if std_rest > RESTING_HALF_STDD_MAX:
-        return False
-    return True
+def _biometric_stream_status() -> Tuple[bool, Optional[datetime]]:
+    """(stream_active, timestamp_of_newest_positive_vitals_or_None)."""
+    ts = _latest_positive_vitals_timestamp()
+    if ts is None:
+        return False, None
+    age = (get_current_utc_time() - ts).total_seconds()
+    return age <= BIOMETRIC_STALE_SECONDS, ts
 
 
 def evaluate_sleep_state(app) -> Dict[str, Any]:
     """
-    Update ``current_user_state`` ∈ { AWAKE, SETTLING, ASLEEP } using the last
-    ``SLEEP_LOOKBACK_MINUTES`` of gyro + HR samples.
+    Update ``current_user_state`` ∈ { AWAKE, ASLEEP }.
 
-    Persists a ``SleepSession`` row at ASLEEP onset and sets ``ended_at`` plus
-    readiness metrics when a violent gyro returns the user to AWAKE.
+    While positive HR and SpO₂ continue to arrive on recent readings (biometric
+    stream), the user is treated as in bed and a ``SleepSession`` is open. When
+    vitals go stale or absent, the session is finalized and state returns to
+    AWAKE.
     """
     global current_user_state, sleep_session_start_time, active_sleep_session_id
 
     finalized_id: Optional[int] = None
-    asleep_start_candidate: Optional[datetime] = None
+    new_session_at: Optional[datetime] = None
 
     with app.app_context():
-        seq = _read_rows_last_window(SLEEP_LOOKBACK_MINUTES)
+        active, vitals_ts = _biometric_stream_status()
 
         with sleep_state_lock:
-            if _gyro_violent_spike(seq):
+            if active:
+                if current_user_state != "ASLEEP":
+                    new_session_at = vitals_ts or get_current_utc_time()
+                    sleep_session_start_time = new_session_at
+                    current_user_state = "ASLEEP"
+            else:
                 if (
                     current_user_state == "ASLEEP"
                     and active_sleep_session_id is not None
@@ -400,24 +377,12 @@ def evaluate_sleep_state(app) -> Dict[str, Any]:
                 current_user_state = "AWAKE"
                 sleep_session_start_time = None
                 active_sleep_session_id = None
-            else:
-                low_stable = _low_gyro_suffix_window_ok(seq)
 
-                if current_user_state == "AWAKE":
-                    if low_stable:
-                        current_user_state = "SETTLING"
-
-                elif current_user_state == "SETTLING":
-                    if not low_stable:
-                        current_user_state = "AWAKE"
-                        sleep_session_start_time = None
-                    elif _hr_decelerating_and_stable_rest(seq):
-                        current_user_state = "ASLEEP"
-                        asleep_start_candidate = get_current_utc_time()
-                        sleep_session_start_time = asleep_start_candidate
-
-        if asleep_start_candidate is not None:
-            sess = SleepSession(started_at=asleep_start_candidate)
+        if new_session_at is not None:
+            sess = SleepSession(
+                started_at=new_session_at,
+                user_id=default_ingest_user_id(),
+            )
             db.session.add(sess)
             db.session.commit()
             with sleep_state_lock:

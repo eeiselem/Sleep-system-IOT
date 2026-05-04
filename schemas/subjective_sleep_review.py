@@ -12,6 +12,9 @@ class SubjectiveSleepReview(db.Model):
 
     ``feedback_for_date`` is the wake morning (UTC calendar day) that ends the
     reviewed night (aligned with sleep readiness / optimal-band keys).
+
+    ``linked_sleep_session_id`` / ``algorithm_readiness_snapshot`` tie this row
+    to ground truth vs the algorithmic sleep score at submit time.
     """
 
     __tablename__ = "morning_sleep_feedback"
@@ -28,6 +31,10 @@ class SubjectiveSleepReview(db.Model):
     feedback_for_date = db.Column(db.Date, nullable=False, index=True)
     rating = db.Column(db.Integer, nullable=False)
     notes = db.Column(db.Text, nullable=True)
+    linked_sleep_session_id = db.Column(
+        db.Integer, db.ForeignKey("sleep_sessions.id"), nullable=True, index=True
+    )
+    algorithm_readiness_snapshot = db.Column(db.Float, nullable=True)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,

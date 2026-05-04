@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Sleep Studio{% endblock %}</title>
-    <link rel="stylesheet" href="./static/css/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
     {% block head_extra %}{% endblock %}
 </head>
-<body {% block body_attr %}{% endblock %}>
+<body {% block body_attr %}class="app-shell"{% endblock %}>
     <div class="nav-bar">
         <h2>Sleep Studio</h2>
         <div>
-            <a href="/dashboard">Dashboard</a> | 
-            <a href="/info">System Info</a> | 
+            <a href="/dashboard">Dashboard</a>
+             |
             <a href="/logout" style="color: #d12643;">Logout</a>
         </div>
     </div>
-    
+
     <div class="content">
         {% block content %}{% endblock %}
     </div>

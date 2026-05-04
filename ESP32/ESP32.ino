@@ -44,7 +44,9 @@ const long SERIAL_BAUD = 115200; // changed to ESP32 standard
 wifi_mode_t wifi_mode = WIFI_STA; // WiFi connection type
 
 // Server config — use https:// with Flask ssl_context='adhoc' (self-signed).
-const String server_url = "https://192.168.12.202:8888";
+//const String server_url = "https://192.168.12.202:8888";
+
+const String server_url = "https://subsection-proceeding-opposition-installing.trycloudflare.com";
 
 // Secrets — UTF‑8 MASTER_ENCRYPTION_KEY must match Flask .env (SHA‑256 expands to AES‑256).
 static const char *MASTER_ENC_SECRET_UTF8 = "0123456789123456";
@@ -193,7 +195,7 @@ void setup() {
 
 void loop() {
    // WebServer listen for incoming requests (/health, /push-now, etc.), no delay
-  server.handleClient(); 
+  server.handleClient();
 
   current_time = millis(); 
 

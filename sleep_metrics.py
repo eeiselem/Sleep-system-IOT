@@ -8,7 +8,11 @@ from db import db
 from schemas.sleep_session import SleepSession
 from schemas.reading import Reading
 from crud.reading import read_sleep_session_between
-from utils import get_current_utc_time
+from utils import get_current_utc_time, restlessness_score_from_raw
+
+# Audit label for subjective-vs-algorithm discrepancy rows; must match the blend in
+# ``compute_sleep_readiness_for_session`` (0.45 / 0.35 / 0.20).
+READINESS_SCORE_FORMULA_VERSION = "0.45*eff + 0.35*prv + 0.20*dist_v1"
 
 
 def _to_float(value):
@@ -22,7 +26,8 @@ def _to_float(value):
 
 def readings_for_sleep_session(sess: SleepSession) -> List[Reading]:
     end = sess.ended_at if sess.ended_at is not None else get_current_utc_time()
-    return read_sleep_session_between(sess.started_at, end)
+    uid = getattr(sess, "user_id", None)
+    return read_sleep_session_between(sess.started_at, end, user_id=uid)
 
 
 def finalize_sleep_session_after_wake(session_id: int) -> Optional[SleepSession]:
@@ -40,6 +45,9 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
     """
     Populate readiness columns on ``SleepSession`` using all readings strictly
     between session start (ASLEEP) and end (AWAKE wake); requires ``ended_at``.
+
+    ``readiness_score`` weights are documented inline where the score is computed
+    (see block above ``readiness_score = ...``).
     """
     sess = db.session.get(SleepSession, session_id)
     if sess is None or sess.ended_at is None:
@@ -64,9 +72,16 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
 
     gyro_values = [_to_float(r.gyro_variance) for r in readings]
     gyro_values = [v for v in gyro_values if v is not None]
-    if gyro_values:
-        restful_count = sum(1 for v in gyro_values if v <= 0.12)
-        sleep_efficiency_pct = (restful_count / len(gyro_values)) * 100.0
+    # Per-sample restful efficiency (100 = still); see ``utils.restlessness_score_from_raw``.
+    restful_efficiency_samples = []
+    for v in gyro_values:
+        s = restlessness_score_from_raw(v)
+        if s is not None:
+            restful_efficiency_samples.append(s)
+    if restful_efficiency_samples:
+        # Share of samples in the top "excellent still" band (aligned with old <=20 motion-stress bucket).
+        restful_count = sum(1 for s in restful_efficiency_samples if s >= 80.0)
+        sleep_efficiency_pct = (restful_count / len(restful_efficiency_samples)) * 100.0
     else:
         sleep_efficiency_pct = 0.0
     sleep_efficiency_score = min(max(sleep_efficiency_pct, 0.0), 100.0)
@@ -108,6 +123,23 @@ def compute_sleep_readiness_for_session(session_id: int) -> Optional[SleepSessio
     disturbance_penalty = min(disturbance_events * 5.0, 100.0)
     disturbance_score = 100.0 - disturbance_penalty
 
+    # --- Sleep score (readiness_score) — weighted blend (all sub-scores are 0–100, higher is better) ---
+    #
+    #   • 45% — sleep_efficiency_score (= sleep_efficiency_pct after clamp). sleep_efficiency_pct is the
+    #           percentage of gyro samples in the session whose **restful efficiency** is ≥ 80
+    #           (``utils.restlessness_score_from_raw``: 100 = still, 0 = restless).
+    #
+    #   • 35% — prv_score from mean absolute beat-to-beat RR interval change (PRV-style): larger
+    #           average delta (ms) across consecutive valid HR samples → higher prv_score, capped by
+    #           ``prv_score = min(100, (avg_prv_ms / 120.0) * 100)``. Not HRV RMSSD from ECG; uses HR-derived RR steps only.
+    #
+    #   • 20% — disturbance_score: starts at 100; each SpO₂ sample below 92% or each ambient-noise spike
+    #           (> baseline + 8 dB) costs 5 points until a floor of 0 (``disturbance_penalty`` cap 100).
+    #
+    # Final: readiness_score = 0.45*sleep_efficiency_score + 0.35*prv_score + 0.20*disturbance_score,
+    # then clamped to [0, 100]. **Motion / restfulness is not a separate weighted term** — it feeds only the
+    # 45% bucket via the share of samples with restful efficiency ≥ 80.
+    #
     readiness_score = (
         (0.45 * sleep_efficiency_score) +
         (0.35 * prv_score) +

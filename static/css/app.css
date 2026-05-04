@@ -1,0 +1,1597 @@
+/**
+ * Sleep Studio — single stylesheet (dashboard, login).
+ * Body classes: .app-shell + .app-dashboard | .app-login
+ */
+
+/**
+ * Sleep Studio dark shell for dashboard and login (body.app-shell).
+ */
+body.app-shell {
+    --studio-bg: #0b0e11;
+    --studio-bg-deep: #000000;
+    --studio-gold: #d4af37;
+    --studio-gold-soft: rgba(212, 175, 55, 0.35);
+    --studio-mint: #e0ff60;
+    --studio-mint-soft: rgba(224, 255, 96, 0.2);
+    --studio-text: rgba(255, 255, 255, 0.92);
+    --studio-text-mid: rgba(255, 255, 255, 0.65);
+    --studio-text-soft: rgba(255, 255, 255, 0.45);
+    --studio-glass: rgba(255, 255, 255, 0.056);
+    --studio-glass-strong: rgba(255, 255, 255, 0.08);
+    --studio-danger: #ff6b81;
+}
+
+/* Matches JS toggle on #intervention-fan-icon */
+@keyframes fan-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+body.app-shell {
+    font-family:
+        'Inter',
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        Roboto,
+        sans-serif;
+    background: radial-gradient(
+            ellipse 120% 80% at 50% -30%,
+            rgba(212, 175, 55, 0.08),
+            transparent 55%
+        ),
+        linear-gradient(180deg, var(--studio-bg-deep) 0%, var(--studio-bg) 45%);
+    background-color: var(--studio-bg-deep);
+    background-attachment: fixed;
+    color: var(--studio-text);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+body.app-shell * {
+    box-sizing: border-box;
+}
+
+/* Nav — slim glass strip */
+body.app-shell .nav-bar {
+    background: rgba(11, 14, 17, 0.72);
+    backdrop-filter: blur(20px) saturate(1.25);
+    -webkit-backdrop-filter: blur(20px) saturate(1.25);
+    border-bottom: none;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    padding: 10px 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+body.app-shell .nav-bar h2 {
+    color: var(--studio-text);
+    font-weight: 600;
+    font-size: 0.88rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+body.app-shell .nav-bar a {
+    color: var(--studio-text-mid);
+    margin-left: 12px;
+    font-weight: 500;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
+}
+
+body.app-shell .nav-bar a:hover {
+    color: var(--studio-gold);
+}
+
+body.app-shell .nav-bar a[href='/logout'],
+body.app-shell .nav-bar a[href*="logout"] {
+    color: var(--studio-danger);
+    opacity: 0.92;
+}
+
+/* Content column — mobile-first, capped on desktop */
+body.app-shell .content {
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 14px max(14px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom))
+        max(14px, env(safe-area-inset-left));
+}
+
+/* Glass cards — no harsh borders */
+body.app-shell .card {
+    background: var(--studio-glass);
+    backdrop-filter: blur(26px) saturate(1.2);
+    -webkit-backdrop-filter: blur(26px) saturate(1.2);
+    border-radius: 24px;
+    border: none;
+    box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    padding: 20px 18px;
+    margin-bottom: 0;
+}
+
+body.app-shell .card + .card,
+body.app-shell .studio-stack > * + *,
+body.app-shell .info-grid > * + * {
+    margin-top: 14px;
+}
+
+body.app-shell .info-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    grid-template-columns: 1fr;
+    margin-bottom: 0;
+}
+
+body.app-shell .card-wide {
+    grid-column: auto;
+}
+
+/* Typography */
+body.app-shell h1.title,
+body.app-shell h2.title,
+body.app-shell h3.title,
+body.app-shell .title {
+    color: var(--studio-text);
+    border-bottom: none;
+    text-align: left;
+    padding-bottom: 0;
+    margin-bottom: 0.5rem;
+}
+
+body.app-shell h1.title.card-header,
+body.app-shell h2.title.card-header,
+body.app-shell h2.card-header {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+body.app-shell .studio-shell > .info-grid + .card {
+    margin-top: 14px;
+}
+
+body.app-shell .studio-muted {
+    font-size: 0.8rem;
+    color: var(--studio-text-soft);
+    margin: 0 0 8px;
+    line-height: 1.45;
+}
+
+body.app-shell strong {
+    color: var(--studio-text);
+    font-weight: 600;
+}
+
+body.app-shell p {
+    color: var(--studio-text-mid);
+}
+
+body.app-shell a {
+    color: var(--studio-gold);
+}
+
+body.app-shell a:hover {
+    color: var(--studio-mint);
+}
+
+body.app-shell code {
+    font-family: ui-monospace, 'Cascadia Code', monospace;
+    font-size: 0.82em;
+    color: var(--studio-mint);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 2px 7px;
+    border-radius: 8px;
+}
+
+body.app-shell .card-divider {
+    border: none;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.09),
+        transparent
+    );
+    margin: 16px 0;
+}
+
+body.app-shell .temp-display-large {
+    font-size: 2.85rem;
+    font-weight: 700;
+    color: var(--studio-text);
+    letter-spacing: -0.03em;
+    margin-top: 4px;
+}
+
+body.app-shell .temp-display-large .temp-val,
+body.app-shell .hum-display-medium .hum-val {
+    color: var(--studio-gold);
+}
+
+body.app-shell .hum-display-medium {
+    color: var(--studio-text-mid);
+    font-weight: 500;
+}
+
+/* Hero readiness */
+body.app-shell .studio-shell {
+    width: 100%;
+}
+
+body.app-shell .studio-hero {
+    text-align: center;
+    padding: 6px 0 22px;
+}
+
+body.app-shell .studio-hero-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--studio-text-soft);
+    margin-bottom: 8px;
+}
+
+body.app-shell .studio-hero-value {
+    font-size: clamp(5rem, 22vw, 7.25rem);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.045em;
+    background: linear-gradient(
+        120deg,
+        var(--studio-gold) 0%,
+        #ecd078 42%,
+        var(--studio-mint) 92%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+
+body.app-shell .studio-hero-value.studio-hero-empty {
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.2);
+    background: none;
+    color: rgba(255, 255, 255, 0.2);
+    font-weight: 700;
+}
+
+body.app-shell .studio-hero-sub {
+    margin: 14px 0 0;
+    font-size: 0.875rem;
+    color: var(--studio-text-mid);
+    font-weight: 500;
+}
+
+/* Thumb-sized controls */
+body.app-shell button,
+body.app-shell .btn-primary,
+body.app-shell .btn-danger,
+body.app-shell input[type='submit'],
+body.app-shell input[type='button'] {
+    min-height: 44px;
+    padding: 10px 18px;
+    border-radius: 16px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    border: none;
+    cursor: pointer;
+}
+
+body.app-shell .btn-primary {
+    background: linear-gradient(135deg, var(--studio-gold) 0%, #b8932e 100%);
+    color: #0b0e11;
+}
+
+body.app-shell .btn-primary:hover {
+    filter: brightness(1.06);
+}
+
+body.app-shell .btn-danger {
+    background: rgba(255, 107, 129, 0.35);
+    color: var(--studio-danger);
+    border: 1px solid rgba(255, 107, 129, 0.4);
+}
+
+body.app-shell .btn-danger:hover {
+    background: rgba(255, 107, 129, 0.5);
+}
+
+body.app-shell .form-label {
+    font-size: 0.82rem;
+    color: var(--studio-text-mid);
+    font-weight: 500;
+}
+
+body.app-shell .form-input,
+body.app-shell input.form-input,
+body.app-shell select.form-input,
+body.app-shell textarea.form-input {
+    min-height: 44px;
+    border-radius: 16px;
+    border: none;
+    background: rgba(0, 0, 0, 0.28);
+    color: var(--studio-text);
+    padding: 10px 14px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+body.app-shell textarea.form-input {
+    min-height: 88px;
+}
+
+body.app-shell select.form-input option {
+    background: #1a1d22;
+}
+
+body.app-shell input[type='checkbox'] {
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--studio-gold);
+}
+
+body.app-shell .sleep-history-toolbar select.form-input,
+body.app-shell .sleep-history-toolbar .form-input {
+    width: 100%;
+    min-width: 0;
+}
+
+body.app-shell .flex-row,
+body.app-shell .flex-row-between,
+body.app-shell .sleep-history-toolbar {
+    flex-wrap: wrap;
+}
+
+/* Intervention panel */
+body.app-shell .intervention-status-panel .intervention-row {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 16px;
+    padding: 10px 12px;
+}
+
+body.app-shell .intervention-status-panel .intervention-row.intervention-row-active {
+    background: var(--studio-mint-soft);
+    box-shadow:
+        inset 0 1px 0 rgba(224, 255, 96, 0.2),
+        0 0 0 1px rgba(212, 175, 55, 0.15);
+}
+
+body.app-shell .intervention-status-panel .intervention-label {
+    color: var(--studio-text);
+}
+
+body.app-shell .intervention-badge {
+    border: none !important;
+    border-radius: 999px !important;
+    font-size: 0.68rem !important;
+    letter-spacing: 0.08em !important;
+}
+
+body.app-shell .intervention-badge.intervention-idle {
+    color: var(--studio-text-soft) !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+}
+
+body.app-shell .intervention-badge.intervention-running-cooling {
+    color: #9fd4ff !important;
+    background: rgba(74, 144, 217, 0.25) !important;
+}
+
+body.app-shell .intervention-badge.intervention-running-heater {
+    color: #ffb86b !important;
+    background: rgba(255, 140, 66, 0.2) !important;
+}
+
+body.app-shell .intervention-badge.intervention-running-noise {
+    color: #dab8ff !important;
+    background: rgba(159, 122, 234, 0.22) !important;
+}
+
+body.app-shell .intervention-badge.intervention-running-fan {
+    color: var(--studio-mint) !important;
+    background: rgba(224, 255, 96, 0.15) !important;
+}
+
+/* Morning Review — tabs + 7-day history */
+body.app-shell.app-dashboard .morning-review-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 10px 0 12px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.28);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+body.app-shell.app-dashboard .morning-review-tab {
+    flex: 1;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: inherit;
+    color: var(--studio-text-soft);
+    background: transparent;
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+body.app-shell.app-dashboard .morning-review-tab:hover {
+    color: var(--studio-text-mid);
+}
+
+body.app-shell.app-dashboard .morning-review-tab.is-active {
+    color: var(--studio-text);
+    background: rgba(212, 175, 55, 0.2);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.28);
+}
+
+body.app-shell.app-dashboard .morning-review-history-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+body.app-shell.app-dashboard .morning-review-history-card {
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(0, 0, 0, 0.22);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+        0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+body.app-shell.app-dashboard .morning-review-inline-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+body.app-shell.app-dashboard .morning-review-inline-icon svg {
+    width: 21px;
+    height: 21px;
+    color: rgba(212, 175, 55, 0.88);
+}
+
+body.app-shell.app-dashboard .morning-review-history-card svg.mr-rail-icon--battery {
+    color: rgba(167, 211, 196, 0.95);
+}
+
+body.app-shell.app-dashboard .morning-review-history-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+}
+
+body.app-shell.app-dashboard .morning-review-history-head-text {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+    min-width: 0;
+}
+
+body.app-shell.app-dashboard .morning-review-history-stars {
+    font-size: 0.92rem;
+    color: rgba(244, 160, 41, 0.95);
+    letter-spacing: 2px;
+}
+
+body.app-shell.app-dashboard .morning-review-history-date {
+    font-size: 0.8rem;
+    color: var(--studio-text-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+body.app-shell.app-dashboard .morning-review-history-readiness {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 8px 0 4px;
+    padding-left: 2px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(167, 211, 196, 0.88);
+}
+
+body.app-shell.app-dashboard .morning-review-history-readiness.is-missing .morning-review-readiness-text {
+    opacity: 0.42;
+}
+
+body.app-shell.app-dashboard .morning-review-history-notes {
+    margin: 10px 0 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: var(--studio-text-mid);
+    white-space: pre-wrap;
+}
+
+body.app-shell.app-dashboard .morning-review-history-notes.is-empty {
+    font-style: italic;
+    color: var(--studio-text-soft);
+}
+
+body.app-shell.app-dashboard .morning-review-history-empty {
+    font-size: 0.86rem;
+    color: var(--studio-text-soft);
+    text-align: center;
+    padding: 20px 10px;
+    margin: 0;
+}
+
+body.app-shell.app-dashboard .morning-review-note-body.has-notes {
+    color: var(--studio-text-mid);
+}
+
+body.app-shell.app-dashboard .morning-review-note-body.no-notes {
+    font-style: italic;
+    color: var(--studio-text-soft);
+}
+
+/* Developer simulation overrides (presentation) */
+body.app-shell .dev-simulation-panel summary {
+    list-style: none;
+}
+
+body.app-shell .dev-simulation-summary::-webkit-details-marker {
+    display: none;
+}
+
+body.app-shell .dev-simulation-panel[open] {
+    box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.12);
+}
+
+body.app-shell .dev-simulation-panel .title.card-header {
+    margin-bottom: 0;
+}
+
+/* Sunrise track */
+body.app-shell #sunrise-track {
+    border-radius: 999px !important;
+    opacity: 0.95;
+}
+
+/* Morning review history */
+body.app-shell #morning-review-history-panel {
+    background: rgba(0, 0, 0, 0.2);
+    border: none;
+    border-radius: 18px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+body.app-shell #morning-review-history-panel li {
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+body.app-shell .morning-review-star-muted {
+    color: var(--studio-text-soft);
+}
+
+body.app-shell .morning-review-star-filled {
+    color: var(--studio-gold);
+}
+
+body.app-shell .morning-review-star-empty {
+    color: var(--studio-text-soft);
+}
+
+/* Event log */
+body.app-shell .evt-log-summary {
+    background: var(--studio-glass-strong);
+    border: none;
+    color: var(--studio-text-mid);
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+body.app-shell .evt-log-table {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+body.app-shell .evt-log-table th {
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--studio-text-mid);
+    border-bottom-color: transparent;
+}
+
+body.app-shell .evt-log-table td {
+    color: var(--studio-text-mid);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.app-shell .evt-log-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+body.app-shell .evt-col-hi {
+    background: rgba(212, 175, 55, 0.12) !important;
+    color: var(--studio-gold) !important;
+    font-weight: 600 !important;
+}
+
+body.app-shell .utc-table-time {
+    color: var(--studio-text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Comfort slider track */
+body.app-shell .cfg-temp-range-track {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05),
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.05)
+    );
+    border-radius: 12px !important;
+    box-shadow:
+        inset 0 2px 8px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+}
+
+body.app-shell .cfg-temp-range-optimal {
+    background: linear-gradient(
+        180deg,
+        rgba(224, 255, 96, 0.45),
+        rgba(212, 175, 55, 0.45)
+    ) !important;
+    box-shadow:
+        0 0 0 2px rgba(224, 255, 96, 0.25),
+        0 0 20px rgba(212, 175, 55, 0.15) !important;
+}
+
+body.app-shell .cfg-temp-range-cap {
+    color: var(--studio-text-soft);
+}
+
+/* Sleep session environmental charts */
+
+body.app-shell.app-dashboard .sleep-chart-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+body.app-shell.app-dashboard .sleep-chart-section-title {
+    font-size: 0.74rem;
+    color: var(--studio-text-soft);
+    margin: 10px 0 0;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+body.app-shell.app-dashboard .sleep-chart-wrap {
+    position: relative;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+body.app-shell.app-dashboard .sleep-chart-slot {
+    height: 172px;
+    position: relative;
+}
+
+body.app-shell.app-dashboard .sleep-chart-compare-slot {
+    height: 228px;
+}
+
+body.app-shell.app-dashboard .sleep-chart-wrap canvas {
+    display: block;
+}
+
+body.app-shell.app-dashboard .sleep-chart-guide-msg {
+    position: absolute;
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: 8px;
+    margin: 0;
+    pointer-events: none;
+    font-size: 0.73rem;
+    line-height: 1.38;
+    text-align: center;
+    color: var(--studio-text-mid);
+    z-index: 1;
+    text-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.75),
+        0 0 12px rgba(0, 0, 0, 0.5);
+}
+
+body.app-shell.app-dashboard .sleep-chart-wrap.sleep-chart-guide-on canvas {
+    opacity: 0.38;
+}
+
+@media (max-width: 479px) {
+    body.app-shell .content {
+        max-width: 100%;
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+    }
+
+    body.app-shell .sleep-chart-slot {
+        height: 150px;
+    }
+
+    body.app-shell.app-dashboard .sleep-chart-compare-slot {
+        height: 198px;
+    }
+
+    body.app-shell .sleep-weekly-slot {
+        height: 260px;
+    }
+}
+
+
+/* --- Login (standalone) --------------------------------------------------- */
+body.app-shell.app-login {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+
+body.app-shell.app-login .login-container {
+    width: 100%;
+    max-width: min(440px, 100%);
+    margin: 0 auto;
+}
+
+body.app-shell.app-login .links {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 0.9rem;
+}
+
+body.app-shell.app-login .links span {
+    color: var(--studio-text-soft) !important;
+}
+
+body.app-shell.app-login .input-group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 1rem;
+    text-align: left;
+}
+
+body.app-shell.app-login .input-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--studio-text-mid);
+    font-size: 0.88rem;
+}
+
+body.app-shell.app-login .input-group input {
+    border-radius: 16px !important;
+    border: none !important;
+    min-height: 44px;
+    padding: 12px 14px !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+    color: var(--studio-text) !important;
+}
+
+body.app-shell.app-login .login-password-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    align-self: stretch;
+    min-width: 0;
+}
+
+body.app-shell.app-login .login-password-wrap input {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-right: 48px !important;
+}
+
+body.app-shell.app-login .toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--studio-text-mid);
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+body.app-shell.app-login .toggle-password:hover {
+    color: var(--studio-gold);
+}
+
+body.app-shell.app-login h2.title {
+    text-align: center;
+    margin-bottom: 8px;
+    background: linear-gradient(120deg, var(--studio-gold), var(--studio-mint));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+body.app-shell.app-login .login-tagline {
+    text-align: center;
+    color: var(--studio-text-soft);
+    margin: 0 0 20px;
+    font-size: 0.9rem;
+}
+
+body.app-shell.app-login .login-container button.btn-primary {
+    width: 100%;
+}
+
+body.app-shell .card-title,
+body.app-shell .card > h3 {
+    color: var(--studio-text) !important;
+    border: none !important;
+}
+
+body.app-shell .card ul {
+    padding-left: 1.25rem;
+    color: var(--studio-text-mid);
+}
+
+/* --- Dashboard layout (was inline in dashboard.html) --- */
+@keyframes fan-spin-tw { to { transform: rotate(360deg); } }
+    body.app-shell.app-dashboard .nav-bar {
+        background: rgba(11, 14, 17, 0.72) !important;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    }
+    body.app-shell.app-dashboard .nav-bar a { color: #d4d4d8 !important; font-weight: 600; }
+    body.app-shell.app-dashboard .nav-bar a:hover { color: #d4af37 !important; }
+    body.app-shell.app-dashboard .content { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    @media (min-width: 640px) { body.app-shell.app-dashboard .content { padding: 1.5rem 1.25rem 2.5rem; } }
+    body.app-shell.app-dashboard h1, body.app-shell.app-dashboard h2, body.app-shell.app-dashboard h3 { color: inherit; }
+
+    /* Layout + component shortcuts (replaces long Tailwind chains in dashboard.html) */
+    body.app-shell.app-dashboard.dash-body {
+        min-height: 100vh;
+        background: #0b0e11 !important;
+        color: #e4e4e7;
+        font-family: Inter, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+    body.app-shell.app-dashboard .dash-page {
+        margin-left: auto;
+        margin-right: auto;
+        max-width: 72rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding-bottom: 2rem;
+    }
+    @media (min-width: 640px) {
+        body.app-shell.app-dashboard .dash-page {
+            gap: 1.5rem;
+            padding-bottom: 3rem;
+        }
+    }
+    body.app-shell.app-dashboard .dash-hero {
+        position: relative;
+        overflow: visible;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: linear-gradient(
+            to bottom right,
+            rgba(255, 255, 255, 0.07),
+            rgba(255, 255, 255, 0.03),
+            transparent
+        );
+        padding: 1.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(24px);
+    }
+    @media (min-width: 640px) {
+        body.app-shell.app-dashboard .dash-hero {
+            padding: 2rem;
+        }
+    }
+    body.app-shell.app-dashboard .dash-card {
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
+        padding: 1rem;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(24px);
+    }
+    @media (min-width: 640px) {
+        body.app-shell.app-dashboard .dash-card {
+            padding: 1.5rem;
+        }
+    }
+    body.app-shell.app-dashboard .dash-card--trans {
+        transition: all 0.3s ease;
+    }
+    body.app-shell.app-dashboard .dash-card--wide {
+        width: 100%;
+    }
+    body.app-shell.app-dashboard .dash-card--mb {
+        margin-bottom: 1.25rem;
+    }
+    body.app-shell.app-dashboard .dash-h2 {
+        margin-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.75rem;
+        text-align: left;
+        font-size: 0.75rem;
+        line-height: 1rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: #71717a;
+    }
+    body.app-shell.app-dashboard .dash-h2--flat {
+        margin-bottom: 0.25rem;
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+    body.app-shell.app-dashboard .dash-inp {
+        box-sizing: border-box;
+        min-height: 44px;
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 0;
+        background: rgba(0, 0, 0, 0.35);
+        padding: 0.5rem 0.875rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: #f4f4f5;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    }
+    body.app-shell.app-dashboard .dash-inp::placeholder {
+        color: #52525b;
+    }
+    body.app-shell.app-dashboard .dash-inp:focus {
+        outline: none;
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+            0 0 0 2px rgba(45, 212, 191, 0.25);
+    }
+    body.app-shell.app-dashboard .dash-inp--tabular {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    body.app-shell.app-dashboard .dash-inp--sm {
+        min-height: 40px;
+        font-size: 0.875rem;
+    }
+    body.app-shell.app-dashboard .dash-form-label {
+        display: block;
+        font-size: 0.75rem;
+        line-height: 1rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #71717a;
+    }
+    body.app-shell.app-dashboard .dash-form-label.dash-form-label--caps {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+    }
+    body.app-shell.app-dashboard label.dash-select-field:not(.hidden) {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    body.app-shell.app-dashboard .dash-select-field--min-10 {
+        min-width: 10rem;
+    }
+    body.app-shell.app-dashboard .dash-select-field--min-18 {
+        min-width: 18rem;
+    }
+    body.app-shell.app-dashboard .dash-field-label {
+        display: block;
+        font-size: 0.8rem;
+        color: #a1a1aa;
+    }
+    body.app-shell.app-dashboard .dash-textarea {
+        min-height: 88px;
+        width: 100%;
+        resize: vertical;
+        border-radius: 0.75rem;
+        border: 0;
+        background: rgba(0, 0, 0, 0.35);
+        padding: 0.5rem 0.875rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: #f4f4f5;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    }
+    body.app-shell.app-dashboard .dash-textarea::placeholder {
+        color: #52525b;
+    }
+    body.app-shell.app-dashboard .dash-textarea:focus {
+        outline: none;
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+            0 0 0 2px rgba(45, 212, 191, 0.25);
+    }
+    body.app-shell.app-dashboard .dash-btn,
+    body.app-shell.app-dashboard .dash-btn-danger {
+        min-height: 44px;
+        border-radius: 0.75rem;
+        border: 0;
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: filter 0.15s ease, transform 0.15s ease;
+    }
+    body.app-shell.app-dashboard .dash-btn {
+        color: #0b0e11;
+        background: linear-gradient(to right, #f59e0b, #d97706);
+        box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.25);
+    }
+    body.app-shell.app-dashboard .dash-btn-danger {
+        color: #fff;
+        background: linear-gradient(to right, #e11d48, #be123c);
+        box-shadow: 0 10px 15px -3px rgba(190, 18, 60, 0.3);
+    }
+    body.app-shell.app-dashboard .dash-btn:hover,
+    body.app-shell.app-dashboard .dash-btn-danger:hover {
+        filter: brightness(1.08);
+    }
+    body.app-shell.app-dashboard .dash-btn:active,
+    body.app-shell.app-dashboard .dash-btn-danger:active {
+        transform: scale(0.98);
+    }
+    body.app-shell.app-dashboard .dash-btn--grow {
+        flex: 1 1 0%;
+        min-width: 8.5rem;
+    }
+    body.app-shell.app-dashboard .dash-btn--full {
+        width: 100%;
+    }
+    body.app-shell.app-dashboard .dash-metric-tile {
+        box-sizing: border-box;
+        display: flex;
+        width: 100%;
+        min-width: 0;
+        flex-direction: column;
+        gap: 0.375rem;
+        border-radius: 0.75rem;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 0.625rem 0.75rem;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+    body.app-shell.app-dashboard .dash-metric-tile__head {
+        display: flex;
+        width: 100%;
+        min-width: 0;
+        align-items: flex-start;
+        justify-content: space-between;
+        column-gap: 0.35rem;
+    }
+    body.app-shell.app-dashboard .dash-metric-tile__label {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.25;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #71717a;
+        text-align: left;
+    }
+    body.app-shell.app-dashboard .dash-metric-tile__tip-slot {
+        flex: 0 0 1.375rem;
+        width: 1.375rem;
+        height: 1.375rem;
+        flex-shrink: 0;
+    }
+    body.app-shell.app-dashboard .dash-metric-tile__tip-wrap {
+        flex: 0 0 1.375rem;
+        width: 1.375rem;
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    body.app-shell.app-dashboard .dash-metric-tile__tip-wrap .dash-metric-tip {
+        margin-left: 0;
+    }
+    body.app-shell.app-dashboard .dash-metric-tile__value {
+        width: 100%;
+        min-width: 0;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: #e4e4e7;
+    }
+    body.app-shell.app-dashboard .dash-dev-scenario {
+        min-height: 44px;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.3);
+        padding: 0.625rem 0.75rem;
+        text-align: left;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #e4e4e7;
+        cursor: pointer;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    body.app-shell.app-dashboard .dash-dev-scenario:hover {
+        border-color: rgba(45, 212, 191, 0.35);
+        background: rgba(0, 0, 0, 0.45);
+    }
+    body.app-shell.app-dashboard .dash-dev-scenario.dash-dev-scenario--active {
+        border-color: rgba(245, 158, 11, 0.65);
+        background: rgba(245, 158, 11, 0.2);
+        color: #fafaf4;
+        font-weight: 600;
+        box-shadow:
+            0 0 0 2px rgba(245, 158, 11, 0.45),
+            inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    }
+    body.app-shell.app-dashboard .dash-dev-scenario.dash-dev-scenario--active:hover {
+        border-color: rgba(251, 191, 36, 0.75);
+        background: rgba(245, 158, 11, 0.28);
+    }
+    body.app-shell.app-dashboard .temp-val {
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+    }
+    body.app-shell.app-dashboard .temp-val.dash-temp-tier-neutral {
+        background-image: linear-gradient(to bottom right, #fafafa, #a1a1aa);
+    }
+    body.app-shell.app-dashboard .temp-val.dash-temp-tier-ok {
+        background-image: linear-gradient(to bottom right, #6ee7b7, #2dd4bf);
+    }
+    body.app-shell.app-dashboard .temp-val.dash-temp-tier-amber {
+        background-image: linear-gradient(to bottom right, #fcd34d, #f59e0b);
+    }
+    body.app-shell.app-dashboard .temp-val.dash-temp-tier-red {
+        background-image: linear-gradient(to bottom right, #fb7185, #e11d48);
+    }
+
+    body.app-shell.app-dashboard .dash-sleep-metric-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+    }
+    body.app-shell.app-dashboard .dash-sleep-metric-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #a1a1aa;
+    }
+    body.app-shell.app-dashboard .dash-sleep-chart-wrap {
+        position: relative;
+        min-height: 250px;
+        height: 250px;
+        overflow: hidden;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.35);
+    }
+    body.app-shell.app-dashboard .dash-sleep-chart-guide-msg {
+        pointer-events: none;
+        position: absolute;
+        inset: auto 0.5rem 1rem 0.5rem;
+        margin: 0;
+        display: flex;
+        min-height: 3rem;
+        align-items: flex-end;
+        justify-content: center;
+        text-align: center;
+        font-size: 0.73rem;
+        line-height: 1.35;
+        color: #a1a1aa;
+    }
+    body.app-shell.app-dashboard .dash-score-chart-shell {
+        position: relative;
+        overflow: visible;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.35);
+        padding: 0.5rem;
+    }
+    body.app-shell.app-dashboard .dash-hero-metric-tip-wrap,
+    body.app-shell.app-dashboard .dash-score-chart-metric-tip-wrap {
+        position: absolute;
+        right: 15px;
+        top: 15px;
+        z-index: 20;
+    }
+    body.app-shell.app-dashboard .dash-score-chart-host {
+        position: relative;
+        height: 260px;
+        min-height: 220px;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 0.5rem;
+    }
+    @media (min-width: 640px) {
+        body.app-shell.app-dashboard .dash-score-chart-host {
+            height: 280px;
+        }
+    }
+    body.app-shell.app-dashboard .dash-cfg-section {
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(9, 9, 11, 0.7);
+        padding: 1.25rem;
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+            0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    }
+    body.app-shell.app-dashboard .dash-cfg-section--wake {
+        border-color: rgba(20, 184, 166, 0.2);
+        background: rgba(24, 24, 27, 0.55);
+        box-shadow:
+            inset 0 0 0 1px rgba(20, 184, 166, 0.1),
+            0 10px 15px -3px rgba(0, 0, 0, 0.35);
+    }
+    body.app-shell.app-dashboard .dash-cfg-h3 {
+        margin-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.5rem;
+        text-align: left;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: #a1a1aa;
+    }
+    body.app-shell.app-dashboard .dash-cfg-h4 {
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.5rem;
+        text-align: left;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: #71717a;
+    }
+    body.app-shell.app-dashboard .dash-cfg-section--nested {
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.35);
+        box-shadow:
+            inset 0 2px 12px rgba(0, 0, 0, 0.25),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+    @media (min-width: 640px) {
+        body.app-shell.app-dashboard .dash-cfg-section--nested {
+            padding: 1.25rem;
+        }
+    }
+    body.app-shell.app-dashboard .dash-intervention-row {
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-radius: 1rem;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 0.625rem 0.75rem;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        transition:
+            background 0.3s ease,
+            box-shadow 0.3s ease,
+            border-color 0.3s ease;
+    }
+    body.app-shell.app-dashboard .dash-intervention-row:last-of-type {
+        margin-bottom: 0;
+    }
+    body.app-shell.app-dashboard .dash-intervention-badge {
+        border-radius: 9999px;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.25rem 0.75rem;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #71717a;
+        transition:
+            background 0.3s ease,
+            color 0.3s ease,
+            box-shadow 0.3s ease,
+            transform 0.3s ease;
+    }
+    body.app-shell.app-dashboard .dash-pre-log {
+        overflow-x: auto;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(0, 0, 0, 0.55);
+        padding: 0.75rem;
+        font-size: 11px;
+        line-height: 1.35;
+        box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+    }
+    body.app-shell.app-dashboard .dash-coach-inp {
+        box-sizing: border-box;
+        min-height: 44px;
+        min-width: 0;
+        flex: 1 1 0%;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.4);
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        color: #f4f4f5;
+    }
+    body.app-shell.app-dashboard .dash-coach-inp::placeholder {
+        color: #52525b;
+    }
+    body.app-shell.app-dashboard .dash-coach-inp:focus {
+        outline: none;
+        border-color: rgba(45, 212, 191, 0.4);
+        box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.25);
+    }
+
+    .cfg-temp-range-optimal { transition: left 0.12s ease, width 0.12s ease, box-shadow 0.2s; }
+    body.app-shell.app-dashboard .sleep-chart-guide-on > canvas:first-of-type { opacity: 0.38; transition: opacity 0.25s linear; }
+    body.app-shell.app-dashboard .sleep-chart-guide-msg { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85); }
+    body.app-shell.app-dashboard .cfg-temp-range-draggable { cursor: grab; }
+    body.app-shell.app-dashboard .cfg-temp-range-dragging { cursor: grabbing; }
+
+    body.app-shell.app-dashboard .config-panel-tech-logs summary {
+        list-style: none;
+    }
+    body.app-shell.app-dashboard .config-panel-tech-logs summary::-webkit-details-marker {
+        display: none;
+    }
+    body.app-shell.app-dashboard .config-panel-tech-logs summary:focus-visible {
+        outline: 2px solid rgba(45, 212, 191, 0.45);
+        outline-offset: 2px;
+        border-radius: 6px;
+    }
+    body.app-shell.app-dashboard .config-panel-tech-logs[open] {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    body.app-shell.app-dashboard #cfg-temp-range-track,
+    body.app-shell.app-dashboard #cfg-temp-range-optimal {
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    body.app-shell.app-dashboard .live-metric-primary--offline {
+        opacity: 0.5;
+        transition: opacity 0.2s ease;
+    }
+    body.app-shell.app-dashboard .live-metric-age--offline {
+        color: rgba(161, 161, 170, 0.85);
+    }
+
+    /* Morning review history cards */
+    body.app-shell.app-dashboard .morning-review-history-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    body.app-shell.app-dashboard .morning-review-history-card {
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow:
+            inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+            0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+    body.app-shell.app-dashboard .morning-review-inline-icon {
+        display: inline-flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+    }
+    body.app-shell.app-dashboard .morning-review-inline-icon svg {
+        width: 21px;
+        height: 21px;
+        color: rgba(212, 175, 55, 0.88);
+    }
+    body.app-shell.app-dashboard .morning-review-history-card svg.mr-rail-icon--battery {
+        color: rgba(167, 211, 196, 0.95);
+    }
+    body.app-shell.app-dashboard .morning-review-history-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 11px;
+    }
+    body.app-shell.app-dashboard .morning-review-history-head-text {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px 12px;
+        min-width: 0;
+    }
+    body.app-shell.app-dashboard .morning-review-history-stars {
+        font-size: 0.92rem;
+        color: rgba(244, 160, 41, 0.95);
+        letter-spacing: 2px;
+    }
+    body.app-shell.app-dashboard .morning-review-history-date {
+        font-size: 0.8rem;
+        color: #a1a1aa;
+        font-variant-numeric: tabular-nums;
+    }
+    body.app-shell.app-dashboard .morning-review-history-readiness {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin: 8px 0 4px;
+        padding-left: 2px;
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(167, 211, 196, 0.88);
+    }
+    body.app-shell.app-dashboard .morning-review-history-readiness.is-missing .morning-review-readiness-text {
+        opacity: 0.42;
+    }
+    body.app-shell.app-dashboard .morning-review-history-notes {
+        margin: 10px 0 0;
+        font-size: 0.84rem;
+        line-height: 1.45;
+        color: #d4d4d8;
+        white-space: pre-wrap;
+    }
+    body.app-shell.app-dashboard .morning-review-history-notes.is-empty {
+        font-style: italic;
+        color: #a1a1aa;
+    }
+    body.app-shell.app-dashboard .morning-review-history-empty {
+        font-size: 0.86rem;
+        color: #a1a1aa;
+        text-align: center;
+        padding: 20px 10px;
+        margin: 0;
+    }
+    body.app-shell.app-dashboard .morning-review-note-body.has-notes {
+        color: #d4d4d8;
+    }
+    body.app-shell.app-dashboard .morning-review-note-body.no-notes {
+        font-style: italic;
+        color: #a1a1aa;
+    }
+
+    body.app-shell.app-dashboard .dash-metric-tip {
+        position: relative;
+        display: inline-flex;
+        vertical-align: middle;
+        margin-left: 0.35rem;
+        z-index: 0;
+    }
+    body.app-shell.app-dashboard .dash-metric-tip:hover,
+    body.app-shell.app-dashboard .dash-metric-tip:focus-within {
+        z-index: 10000;
+    }
+    body.app-shell.app-dashboard .dash-metric-tip__btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        margin: 0;
+        border: none;
+        background: transparent;
+        color: rgba(161, 161, 170, 0.88);
+        cursor: help;
+        border-radius: 9999px;
+        line-height: 0;
+    }
+    body.app-shell.app-dashboard .dash-metric-tip__btn:hover,
+    body.app-shell.app-dashboard .dash-metric-tip__btn:focus-visible {
+        color: #d4af37;
+        outline: none;
+    }
+    body.app-shell.app-dashboard .dash-metric-tip__btn svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+    }
+    body.app-shell.app-dashboard .dash-metric-tip__bubble {
+        position: absolute;
+        z-index: 10001;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        box-sizing: border-box;
+        width: max-content;
+        max-width: min(250px, calc(100vw - 16px));
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 0.74rem;
+        font-weight: 500;
+        line-height: 1.4;
+        text-transform: none;
+        letter-spacing: normal;
+        font-style: normal;
+        color: #e4e4e7;
+        background: rgba(11, 14, 17, 0.97);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        transition: opacity 0.14s ease, visibility 0.14s;
+    }
+    body.app-shell.app-dashboard .dash-metric-tip:hover .dash-metric-tip__bubble,
+    body.app-shell.app-dashboard .dash-metric-tip:focus-within .dash-metric-tip__bubble {
+        opacity: 1;
+        visibility: visible;
+    }
+    body.app-shell.app-dashboard .sleep-metric-chart-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.25rem 0.75rem;
+        padding: 0 0.15rem;
+    }
+    body.app-shell.app-dashboard .sleep-metric-chart-head .dash-metric-tip {
+        z-index: 0;
+    }
+    body.app-shell.app-dashboard .sleep-metric-chart-head .dash-metric-tip:hover,
+    body.app-shell.app-dashboard .sleep-metric-chart-head .dash-metric-tip:focus-within {
+        z-index: 10000;
+    }
+    .live-metric-age {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+    }
+    .live-metric-age--delayed {
+        color: rgba(251, 191, 36, 0.92);
+    }

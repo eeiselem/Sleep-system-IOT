@@ -22,25 +22,27 @@ EVENT_LOG_ALLOWED_METRICS = frozenset(
 )
 
 EVENT_LOG_METRIC_LABELS = {
-    "temperature": "Temperature (°C)",
+    "temperature": "Temperature (threshold °C; samples stored °C)",
     "humidity": "Humidity (%)",
-    "air_quality": "Gas / VOC (index)",
+    "air_quality": "Air quality index (device)",
     "ambient_noise": "Ambient noise (dB)",
     "heart_rate": "Heart rate (bpm)",
     "spo2": "SpO₂ (%)",
-    "gyro_variance": "Gyro variance (movement)",
+    "gyro_variance": "Raw motion (gyro / activity; maps to restful efficiency in app)",
 }
 
 
 def create(
-    temperature,
-    humidity,
+    temperature=None,
+    humidity=None,
     air_quality=None,
     ambient_noise=None,
     ambient_light=None,
     heart_rate=None,
     spo2=None,
     gyro_variance=None,
+    hrv_rmssd=None,
+    user_id=None,
 ):
     try:
         new_reading = Reading(
@@ -52,6 +54,8 @@ def create(
             heart_rate=heart_rate,
             spo2=spo2,
             gyro_variance=gyro_variance,
+            hrv_rmssd=hrv_rmssd,
+            user_id=user_id,
         )
         db.session.add(new_reading)
         db.session.commit()
@@ -62,9 +66,12 @@ def create(
         print("Error:", e)
 
 
-def read_latest():
+def read_latest(user_id=None):
     try:
-        reading = Reading.query.order_by(Reading.timestamp.desc()).first()
+        q = Reading.query
+        if user_id is not None:
+            q = q.filter(Reading.user_id == user_id)
+        reading = q.order_by(Reading.timestamp.desc(), Reading.id.desc()).first()
         if reading is None:
             return None
 
@@ -78,17 +85,20 @@ def read_latest():
             "heart_rate": reading.heart_rate,
             "spo2": reading.spo2,
             "gyro_variance": reading.gyro_variance,
+            "hrv_rmssd": reading.hrv_rmssd,
         }
     except Exception as e:
         print("Error:", e)
         return None
 
 
-def read_all(num_samples=50) -> List[Reading]:
+def read_all(num_samples=50, user_id=None) -> List[Reading]:
     try:
+        q = Reading.query
+        if user_id is not None:
+            q = q.filter(Reading.user_id == user_id)
         readings = (
-            Reading.query
-            .order_by(Reading.timestamp.desc())
+            q.order_by(Reading.timestamp.desc(), Reading.id.desc())
             .limit(num_samples)
             .all()
         )
@@ -118,6 +128,7 @@ def read_event_log(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     row_cap: int = 1200,
+    user_id: Optional[int] = None,
 ) -> Optional[List[Reading]]:
     """
     Return readings ordered by ascending time within optional bounds.
@@ -132,6 +143,8 @@ def read_event_log(
         cap = 1200
 
     query = Reading.query
+    if user_id is not None:
+        query = query.filter(Reading.user_id == user_id)
 
     end_filter = False
     if start_date:
@@ -182,6 +195,7 @@ def read_event_log(
 def read_sleep_session_between(
     session_start_utc: datetime,
     session_end_utc: datetime,
+    user_id: Optional[int] = None,
 ) -> List[Reading]:
     """
     All readings with ``session_start_utc <= timestamp <= session_end_utc`` (UTC).
@@ -200,16 +214,15 @@ def read_sleep_session_between(
     else:
         end = end.astimezone(timezone.utc)
 
-    return (
-        Reading.query.filter(
-            and_(
-                Reading.timestamp >= start,
-                Reading.timestamp <= end,
-            )
+    q = Reading.query.filter(
+        and_(
+            Reading.timestamp >= start,
+            Reading.timestamp <= end,
         )
-        .order_by(Reading.timestamp.asc())
-        .all()
     )
+    if user_id is not None:
+        q = q.filter(Reading.user_id == user_id)
+    return q.order_by(Reading.timestamp.asc(), Reading.id.asc()).all()
 
 
 def read_search(
@@ -220,6 +233,7 @@ def read_search(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     threshold_temperature: Optional[object] = None,
+    user_id: Optional[int] = None,
 ) -> Optional[List[Reading]]:
     """
     Compatibility wrapper: prefers ``metric`` / ``threshold``; falls back to
@@ -242,4 +256,5 @@ def read_search(
         direction=effective_dir,
         start_date=start_date,
         end_date=end_date,
+        user_id=user_id,
     )

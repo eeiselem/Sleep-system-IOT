@@ -12,6 +12,8 @@ class SleepSession(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
 
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+
     started_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
     ended_at = db.Column(db.DateTime(timezone=True), nullable=True, index=True)
 
