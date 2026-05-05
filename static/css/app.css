@@ -419,159 +419,9 @@ body.app-shell .intervention-badge.intervention-running-fan {
     background: rgba(224, 255, 96, 0.15) !important;
 }
 
-/* Morning Review — tabs + 7-day history */
-body.app-shell.app-dashboard .morning-review-tabs {
-    display: flex;
-    gap: 6px;
-    margin: 10px 0 12px;
-    padding: 4px;
-    border-radius: 14px;
-    background: rgba(0, 0, 0, 0.28);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-}
-
-body.app-shell.app-dashboard .morning-review-tab {
-    flex: 1;
-    border: none;
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-family: inherit;
-    color: var(--studio-text-soft);
-    background: transparent;
-    cursor: pointer;
-    transition:
-        background 0.15s ease,
-        color 0.15s ease,
-        box-shadow 0.15s ease;
-}
-
-body.app-shell.app-dashboard .morning-review-tab:hover {
-    color: var(--studio-text-mid);
-}
-
-body.app-shell.app-dashboard .morning-review-tab.is-active {
-    color: var(--studio-text);
-    background: rgba(212, 175, 55, 0.2);
-    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.28);
-}
-
-body.app-shell.app-dashboard .morning-review-history-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-body.app-shell.app-dashboard .morning-review-history-card {
-    border-radius: 14px;
-    padding: 12px 14px;
-    background: rgba(0, 0, 0, 0.22);
-    box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.06),
-        0 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-body.app-shell.app-dashboard .morning-review-inline-icon {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-}
-
-body.app-shell.app-dashboard .morning-review-inline-icon svg {
-    width: 21px;
-    height: 21px;
-    color: rgba(212, 175, 55, 0.88);
-}
-
-body.app-shell.app-dashboard .morning-review-history-card svg.mr-rail-icon--battery {
-    color: rgba(167, 211, 196, 0.95);
-}
-
-body.app-shell.app-dashboard .morning-review-history-head {
-    display: flex;
-    align-items: flex-start;
-    gap: 11px;
-}
-
-body.app-shell.app-dashboard .morning-review-history-head-text {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 6px 12px;
-    min-width: 0;
-}
-
-body.app-shell.app-dashboard .morning-review-history-stars {
-    font-size: 0.92rem;
-    color: rgba(244, 160, 41, 0.95);
-    letter-spacing: 2px;
-}
-
-body.app-shell.app-dashboard .morning-review-history-date {
-    font-size: 0.8rem;
-    color: var(--studio-text-soft);
-    font-variant-numeric: tabular-nums;
-}
-
-body.app-shell.app-dashboard .morning-review-history-readiness {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin: 8px 0 4px;
-    padding-left: 2px;
-    font-size: 0.76rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: rgba(167, 211, 196, 0.88);
-}
-
-body.app-shell.app-dashboard .morning-review-history-readiness.is-missing .morning-review-readiness-text {
-    opacity: 0.42;
-}
-
-body.app-shell.app-dashboard .morning-review-history-notes {
-    margin: 10px 0 0;
-    font-size: 0.84rem;
-    line-height: 1.45;
-    color: var(--studio-text-mid);
-    white-space: pre-wrap;
-}
-
-body.app-shell.app-dashboard .morning-review-history-notes.is-empty {
-    font-style: italic;
-    color: var(--studio-text-soft);
-}
-
-body.app-shell.app-dashboard .morning-review-history-empty {
-    font-size: 0.86rem;
-    color: var(--studio-text-soft);
-    text-align: center;
-    padding: 20px 10px;
-    margin: 0;
-}
-
-body.app-shell.app-dashboard .morning-review-note-body.has-notes {
-    color: var(--studio-text-mid);
-}
-
-body.app-shell.app-dashboard .morning-review-note-body.no-notes {
-    font-style: italic;
-    color: var(--studio-text-soft);
-}
-
 /* Developer simulation overrides (presentation) */
 body.app-shell .dev-simulation-panel summary {
     list-style: none;
-}
-
-body.app-shell .dev-simulation-summary::-webkit-details-marker {
-    display: none;
 }
 
 body.app-shell .dev-simulation-panel[open] {
@@ -586,30 +436,6 @@ body.app-shell .dev-simulation-panel .title.card-header {
 body.app-shell #sunrise-track {
     border-radius: 999px !important;
     opacity: 0.95;
-}
-
-/* Morning review history */
-body.app-shell #morning-review-history-panel {
-    background: rgba(0, 0, 0, 0.2);
-    border: none;
-    border-radius: 18px;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-}
-
-body.app-shell #morning-review-history-panel li {
-    border-bottom-color: rgba(255, 255, 255, 0.06);
-}
-
-body.app-shell .morning-review-star-muted {
-    color: var(--studio-text-soft);
-}
-
-body.app-shell .morning-review-star-filled {
-    color: var(--studio-gold);
-}
-
-body.app-shell .morning-review-star-empty {
-    color: var(--studio-text-soft);
 }
 
 /* Event log */
@@ -675,10 +501,6 @@ body.app-shell .cfg-temp-range-optimal {
     box-shadow:
         0 0 0 2px rgba(224, 255, 96, 0.25),
         0 0 20px rgba(212, 175, 55, 0.15) !important;
-}
-
-body.app-shell .cfg-temp-range-cap {
-    color: var(--studio-text-soft);
 }
 
 /* Sleep session environmental charts */
@@ -754,9 +576,6 @@ body.app-shell.app-dashboard .sleep-chart-wrap.sleep-chart-guide-on canvas {
         height: 198px;
     }
 
-    body.app-shell .sleep-weekly-slot {
-        height: 260px;
-    }
 }
 
 
@@ -878,11 +697,49 @@ body.app-shell .card ul {
 /* --- Dashboard layout (was inline in dashboard.html) --- */
 @keyframes fan-spin-tw { to { transform: rotate(360deg); } }
     body.app-shell.app-dashboard .nav-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         background: rgba(11, 14, 17, 0.72) !important;
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
         border-bottom: 1px solid rgba(255,255,255,0.06);
         box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    }
+    body.app-shell.app-dashboard .nav-dash {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px 12px;
+    }
+    body.app-shell.app-dashboard .nav-dash-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        row-gap: 6px;
+    }
+    body.app-shell.app-dashboard .nav-dash-links a {
+        margin-left: 0;
+        margin-right: 10px;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    body.app-shell.app-dashboard .nav-dash-links a:last-of-type {
+        margin-right: 0;
+    }
+    body.app-shell.app-dashboard .nav-dash-sep {
+        color: rgba(113,113,122,0.45);
+        margin-right: 10px;
+        font-size: 0.72rem;
+        user-select: none;
+    }
+    body.app-shell.app-dashboard .nav-dash-logout {
+        color: #fb7185 !important;
+        margin-left: 0;
+        font-weight: 600;
+        font-size: 0.78rem;
     }
     body.app-shell.app-dashboard .nav-bar a { color: #d4d4d8 !important; font-weight: 600; }
     body.app-shell.app-dashboard .nav-bar a:hover { color: #d4af37 !important; }
@@ -1135,12 +992,6 @@ body.app-shell .card ul {
         letter-spacing: 0.05em;
         color: #71717a;
         text-align: left;
-    }
-    body.app-shell.app-dashboard .dash-metric-tile__tip-slot {
-        flex: 0 0 1.375rem;
-        width: 1.375rem;
-        height: 1.375rem;
-        flex-shrink: 0;
     }
     body.app-shell.app-dashboard .dash-metric-tile__tip-wrap {
         flex: 0 0 1.375rem;
@@ -1407,21 +1258,6 @@ body.app-shell .card ul {
     body.app-shell.app-dashboard .sleep-chart-guide-msg { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85); }
     body.app-shell.app-dashboard .cfg-temp-range-draggable { cursor: grab; }
     body.app-shell.app-dashboard .cfg-temp-range-dragging { cursor: grabbing; }
-
-    body.app-shell.app-dashboard .config-panel-tech-logs summary {
-        list-style: none;
-    }
-    body.app-shell.app-dashboard .config-panel-tech-logs summary::-webkit-details-marker {
-        display: none;
-    }
-    body.app-shell.app-dashboard .config-panel-tech-logs summary:focus-visible {
-        outline: 2px solid rgba(45, 212, 191, 0.45);
-        outline-offset: 2px;
-        border-radius: 6px;
-    }
-    body.app-shell.app-dashboard .config-panel-tech-logs[open] {
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-    }
 
     body.app-shell.app-dashboard #cfg-temp-range-track,
     body.app-shell.app-dashboard #cfg-temp-range-optimal {

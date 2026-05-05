@@ -1,0 +1,32 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+    if (typeof Chart !== 'undefined') {
+        const tickSoft = 'rgba(255, 255, 255, 0.42)';
+        Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+        Chart.defaults.color = tickSoft;
+        Chart.defaults.borderColor = 'transparent';
+        Chart.defaults.plugins = Chart.defaults.plugins || {};
+        Chart.defaults.plugins.legend = Chart.defaults.plugins.legend || {};
+        Chart.defaults.plugins.legend.labels = Object.assign({}, Chart.defaults.plugins.legend.labels, {
+            color: 'rgba(212, 175, 55, 0.88)',
+            usePointStyle: true,
+            boxWidth: 8,
+            padding: 14,
+        });
+        Chart.defaults.plugins.tooltip = Object.assign({}, Chart.defaults.plugins.tooltip, {
+            backgroundColor: 'rgba(11, 14, 17, 0.94)',
+            titleColor: '#d4af37',
+            bodyColor: '#e4e4e7',
+            borderColor: 'rgba(126, 242, 197, 0.2)',
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 10,
+        });
+    }
+    if (typeof Chart !== 'undefined' && typeof ChartZoom !== 'undefined') {
+        Chart.register(ChartZoom);
+    }
+</script>

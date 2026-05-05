@@ -1,4 +1,3 @@
-"""JSON API routes (dashboard + room sim clients)."""
 import json
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -41,6 +40,7 @@ from timefmt import to_utc_datetime, utc_isoformat_z
 from utils import get_current_utc_time
 
 bp = Blueprint("api", __name__, url_prefix="/api")
+
 
 @bp.route('/user-config', methods=['GET', 'POST'])
 @login_required
@@ -320,15 +320,11 @@ def subjective_sleep_review_history():
         "reviews": [serialize_subjective_sleep_review_history_entry(r) for r in rows],
     }, 200
 
-
-
-
-# called by JavaScript on the dashboard every 30 seconds to get the newest reading without refreshing the page.
+# dashboard polling endpoint
 @bp.route('/latest-readings')
 @login_required
 def latest_readings():
-    # updates the "Current Readings" box — merges recent rows so a biometric-only POST
-    # does not replace environment fields with placeholder zeros.
+    # merge latest env + biometric values for live cards
     return build_latest_live_readings_payload(current_user.id), 200
 
 
@@ -493,7 +489,7 @@ def sleep_readiness_history():
 @bp.route('/sleep-session/list')
 @login_required
 def sleep_session_list():
-    """Recent FSM-derived sleep sessions for the Single Night picker."""
+    # recent sessions for single-night picker
     consciousness, active_sid = get_sleep_session_resolution_context()
     rows = (
         SleepSession.query.filter(SleepSession.user_id == current_user.id)
@@ -557,7 +553,7 @@ def sleep_session_night_readings():
         "window_end": utc_isoformat_z(window_end),
         "sample_count": len(points),
         "points": points,
-        # Hint for clients: chart labels use browser local TZ; instants are always UTC in JSON.
+        # chart labels are local; timestamps here stay UTC
         "timestamps_are_utc": True,
     }, 200
 
@@ -565,15 +561,7 @@ def sleep_session_night_readings():
 @bp.route('/sleep-readiness/weekly-summary')
 @login_required
 def sleep_readiness_weekly_summary():
-    """
-    Trailing seven **completed** sleep sessions (readiness present): sleep score
-    (``readiness_score``), stored session PRV, and per-night means of HR, SpO₂,
-    HRV (RMSSD), lux, air quality index, noise, and restful efficiency (0–100) over each
-    session window. Each row includes ``display_label`` (same wording as the Single
-    Night picker). ``weekly_means`` holds the simple mean of each numeric column
-    across nights in the window (for dashboard summaries). The dashboard weekly view
-    plots these as multi-series night-over-night trends (normalized in the client).
-    """
+    # last 7 completed nights + nightly averages per metric
     rows_chrono = (
         SleepSession.query.filter(
             SleepSession.user_id == current_user.id,
@@ -718,21 +706,7 @@ def simulated_room():
 @bp.route('/dev/simulation', methods=['POST'])
 @login_required
 def dev_simulation_toggle():
-    """
-    Dashboard-only presentation toggles. Forces intervention badges ACTIVE without real sensor drift.
-
-    POST JSON may include booleans ``force_high_temperature``, ``force_high_noise``,
-    ``force_low_temperature``, and ``force_voc_spike`` (partial updates supported),
-    or a single ``scenario`` string that sets a coherent profile:
-
-    - ``cold_night`` — low temperature / heater path (clears other forces)
-    - ``hot_room`` — high temperature / cooling path
-    - ``noisy_room`` — high noise / masking path
-    - ``voc_spike`` — VOC / filtration path
-    - ``clear`` — all forces off
-
-    ``scenario`` is mutually exclusive with individual flag keys in one request.
-    """
+    # dev/demo toggle endpoint
     payload = request.get_json(silent=True) or {}
     allowed_flags = frozenset(
         {

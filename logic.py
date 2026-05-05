@@ -1,13 +1,12 @@
-"""Sleep / comfort tuning helpers (EMA optimal band updates)."""
-
 from __future__ import annotations
 
 import threading
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import or_
 
+import config
 from db import db
 from schemas.micro_arousal_event import MicroArousalEvent
 from schemas.subjective_sleep_review import SubjectiveSleepReview
@@ -15,28 +14,26 @@ from schemas.reading import Reading
 from schemas.sleep_session import SleepSession
 from schemas.user import User
 from sleep_metrics import finalize_sleep_session_after_wake
-from utils import get_current_utc_time
-
-
-def _to_float(value) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+from timefmt import to_utc_datetime, utc_isoformat_z
+from utils import get_current_utc_time, to_float_or_none
 
 
 def _utc_calendar_date(dt: datetime) -> date:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc).date()
-    return dt.astimezone(timezone.utc).date()
+    return to_utc_datetime(dt).date()
+
+
+_DEFAULT_INGEST_UID_CACHE: Optional[int] = None
+_DEFAULT_INGEST_UID_LOADED = False
 
 
 def default_ingest_user_id() -> Optional[int]:
-    """First user row (typical primary account) for unauthenticated device ingest."""
+    global _DEFAULT_INGEST_UID_CACHE, _DEFAULT_INGEST_UID_LOADED
+    if _DEFAULT_INGEST_UID_LOADED:
+        return _DEFAULT_INGEST_UID_CACHE
     u = User.query.order_by(User.id.asc()).first()
-    return u.id if u else None
+    _DEFAULT_INGEST_UID_CACHE = u.id if u else None
+    _DEFAULT_INGEST_UID_LOADED = True
+    return _DEFAULT_INGEST_UID_CACHE
 
 
 def _latest_sleep_session_ended_on(
@@ -60,15 +57,9 @@ def celsius_mean_between(
     window_end_utc: datetime,
     user_id: Optional[int] = None,
 ) -> Optional[float]:
-    """Mean room temperature over [start, end] UTC inclusive, converted to °F (same units as before)."""
-    if window_start_utc.tzinfo is None:
-        window_start_utc = window_start_utc.replace(tzinfo=timezone.utc)
-    else:
-        window_start_utc = window_start_utc.astimezone(timezone.utc)
-    if window_end_utc.tzinfo is None:
-        window_end_utc = window_end_utc.replace(tzinfo=timezone.utc)
-    else:
-        window_end_utc = window_end_utc.astimezone(timezone.utc)
+    # Mean temp in [start, end], returned as Fahrenheit.
+    window_start_utc = _as_utc(window_start_utc)
+    window_end_utc = _as_utc(window_end_utc)
 
     rq = (
         Reading.query.filter(Reading.timestamp >= window_start_utc)
@@ -86,10 +77,7 @@ def celsius_mean_between(
 
 
 def alpha_from_sleep_readiness(readiness_score: float) -> float:
-    """
-    EMA blend factor: conservative for low readiness, strongest above 85.
-    < 60 → no drift toward overnight mean; > 85 → alpha = 0.2.
-    """
+    # Lower readiness => less drift. High readiness => stronger update.
     if readiness_score < 60.0:
         return 0.0
     if readiness_score > 85.0:
@@ -98,10 +86,7 @@ def alpha_from_sleep_readiness(readiness_score: float) -> float:
 
 
 def width_multiplier_from_morning_rating(rating: int) -> float:
-    """
-    Widens optimal band significantly for poor sleep reports (1–2),
-    slightly narrows for good reports (4–5).
-    """
+    # Bad rating widens band, good rating narrows it.
     r = max(1, min(5, int(rating)))
     if r == 1:
         return 1.82
@@ -129,7 +114,7 @@ def _guardrails_f(user: User) -> Tuple[float, float]:
 
 
 def _current_band_f(user: User) -> Tuple[float, float, float]:
-    """Returns (center_f, half_width_f, span_f)."""
+    # Returns (center_f, half_width_f, span_f)
     lo = (
         float(user.cfg_optimal_band_f_min)
         if user.cfg_optimal_band_f_min is not None
@@ -169,11 +154,7 @@ def _clamp_band_to_guardrails(
 
 
 def update_optimal_band(user: User, score_date: date) -> Optional[dict]:
-    """
-    After a completed sleep session whose ``ended_at`` falls on ``score_date``
-    (UTC calendar day): EMA-adjust optimal band from that session's mean °F,
-    and scale band width from subjective morning rating (stored or default).
-    """
+    # Update user's optimal temp band from latest completed session + rating.
     gmin, gmax = _guardrails_f(user)
     if gmin >= gmax:
         return None
@@ -236,7 +217,7 @@ def update_optimal_band(user: User, score_date: date) -> Optional[dict]:
 
 
 def run_daily_optimal_band_updates():
-    """Run ``update_optimal_band`` for every user for today's wake-night score."""
+    # Run update_optimal_band for each user for today.
     score_date = get_current_utc_time().date()
     summaries = []
     for user in User.query.all():
@@ -246,35 +227,16 @@ def run_daily_optimal_band_updates():
     return summaries
 
 
-# ---------------------------------------------------------------------------
-# Sleep session detection (biometric stream present = in bed / ASLEEP)
-# ---------------------------------------------------------------------------
-
 sleep_state_lock = threading.Lock()
 
-# AWAKE ⟷ ASLEEP: valid vitals (HR > 0, SpO₂ > 0) on a recent reading imply the
-# user is in bed with the biometric board; gaps longer than the stale threshold
-# imply wake / session end.
+# If we have fresh positive vitals, treat user as ASLEEP.
 current_user_state = "AWAKE"
 sleep_session_start_time = None
-# Primary key of the open ``sleep_sessions`` row while ASLEEP (None otherwise).
+# PK of open sleep session while ASLEEP.
 active_sleep_session_id = None
 
-# How far back to search for the most recent vitals-bearing reading.
-SLEEP_VITALS_LOOKBACK_MINUTES = 25
-# If the newest valid HR+SpO₂ sample is older than this, treat the stream as idle.
-BIOMETRIC_STALE_SECONDS = 600
-
-
-def _utc_isoformat_z(dt: Optional[datetime]) -> Optional[str]:
-    if dt is None:
-        return None
-    dt_utc = dt
-    if dt_utc.tzinfo is None:
-        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
-    else:
-        dt_utc = dt_utc.astimezone(timezone.utc)
-    return dt_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+SLEEP_VITALS_LOOKBACK_MINUTES = config.SLEEP_VITALS_LOOKBACK_MINUTES
+BIOMETRIC_STALE_SECONDS = config.BIOMETRIC_STALE_SECONDS
 
 
 def get_user_sleep_consciousness_state() -> str:
@@ -283,7 +245,7 @@ def get_user_sleep_consciousness_state() -> str:
 
 
 def get_sleep_session_resolution_context() -> Tuple[str, Optional[int]]:
-    """State machine snapshot for resolving default sleep-session API queries."""
+    # Small snapshot used by sleep-session APIs.
     with sleep_state_lock:
         return current_user_state, active_sleep_session_id
 
@@ -293,17 +255,17 @@ def snapshot_sleep_tracking() -> Dict[str, Any]:
         return {
             "current_user_state": current_user_state,
             "consciousness_state": current_user_state,
-            "sleep_session_started_at": _utc_isoformat_z(sleep_session_start_time),
-            "session_start_time": _utc_isoformat_z(sleep_session_start_time),
+            "sleep_session_started_at": utc_isoformat_z(sleep_session_start_time),
+            "session_start_time": utc_isoformat_z(sleep_session_start_time),
             "sleep_session_id": active_sleep_session_id,
             "session_end_time": None,
         }
 
 
 def _reading_has_positive_vitals(row: Reading) -> bool:
-    """Biometric stream: positive HR and SpO₂ (decoded floats)."""
-    hr = _to_float(row.heart_rate)
-    spo2 = _to_float(row.spo2)
+    # True when both HR and SpO2 are present and > 0.
+    hr = to_float_or_none(row.heart_rate)
+    spo2 = to_float_or_none(row.spo2)
     return (
         hr is not None
         and spo2 is not None
@@ -313,10 +275,7 @@ def _reading_has_positive_vitals(row: Reading) -> bool:
 
 
 def _latest_positive_vitals_timestamp() -> Optional[datetime]:
-    """
-    Timestamp of the newest reading in the lookback window that carries
-    positive vitals (skips environmental rows with NULL HR/SpO₂).
-    """
+    # Newest reading time with positive vitals in lookback window.
     now = get_current_utc_time()
     since = now - timedelta(minutes=SLEEP_VITALS_LOOKBACK_MINUTES)
     rq = Reading.query.filter(Reading.timestamp >= since)
@@ -327,17 +286,13 @@ def _latest_positive_vitals_timestamp() -> Optional[datetime]:
     for r in rows_db:
         if not _reading_has_positive_vitals(r):
             continue
-        ts = r.timestamp
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        else:
-            ts = ts.astimezone(timezone.utc)
+        ts = to_utc_datetime(r.timestamp)
         return ts
     return None
 
 
 def _biometric_stream_status() -> Tuple[bool, Optional[datetime]]:
-    """(stream_active, timestamp_of_newest_positive_vitals_or_None)."""
+    # Returns (stream_active, newest_vitals_ts_or_none)
     ts = _latest_positive_vitals_timestamp()
     if ts is None:
         return False, None
@@ -346,14 +301,7 @@ def _biometric_stream_status() -> Tuple[bool, Optional[datetime]]:
 
 
 def evaluate_sleep_state(app) -> Dict[str, Any]:
-    """
-    Update ``current_user_state`` ∈ { AWAKE, ASLEEP }.
-
-    While positive HR and SpO₂ continue to arrive on recent readings (biometric
-    stream), the user is treated as in bed and a ``SleepSession`` is open. When
-    vitals go stale or absent, the session is finalized and state returns to
-    AWAKE.
-    """
+    # Keep AWAKE/ASLEEP state in sync with recent biometric stream.
     global current_user_state, sleep_session_start_time, active_sleep_session_id
 
     finalized_id: Optional[int] = None
@@ -394,20 +342,16 @@ def evaluate_sleep_state(app) -> Dict[str, Any]:
     return snapshot_sleep_tracking()
 
 
-# -----------------------------------------------------------------------------
-# Biological correlators (PRV spike heuristic + gyro-independent noise context)
-# -----------------------------------------------------------------------------
-
-MICRO_PRV_RING_MAX = 21
-# Acoustic correlate: excursion above calibrated baseline (same spirit as readiness noise threshold).
-NOISE_SPIKE_ABOVE_BASELINE_DB = 8.0
-# HRV proxy: PRV must fall by >15% within this window after a spike edge.
-MICRO_AROUSAL_AFTER_SPIKE_SECONDS = 120.0
-MICRO_AROUSAL_PRV_DROP_FRAC = 0.15
+MICRO_PRV_RING_MAX = config.MICRO_PRV_RING_MAX
+# Noise spike threshold over baseline.
+NOISE_SPIKE_ABOVE_BASELINE_DB = config.MICRO_NOISE_SPIKE_ABOVE_BASELINE_DB
+# PRV drop check window and percentage.
+MICRO_AROUSAL_AFTER_SPIKE_SECONDS = config.MICRO_AROUSAL_AFTER_SPIKE_SECONDS
+MICRO_AROUSAL_PRV_DROP_FRAC = config.MICRO_AROUSAL_PRV_DROP_FRAC
 
 
 def prv_ms_between_hr_samples(prev_hr: Optional[float], curr_hr: Optional[float]) -> Optional[float]:
-    """Beat-to-beat PRV proxy (ms) aligned with nightly chart derivation."""
+    # Simple beat-to-beat PRV proxy (ms).
     if prev_hr is None or curr_hr is None:
         return None
     try:
@@ -453,14 +397,8 @@ def micro_arousal_tick(
     ambient_noise_db: Optional[float],
     noise_baseline_db: Optional[float],
 ) -> Optional[MicroArousalEvent]:
-    """
-    Micro-arousal: within ~2 min of a noise level more than ``NOISE_SPIKE_ABOVE_BASELINE_DB``
-    above the running baseline, PRV/HRV-proxy falls by ``MICRO_AROUSAL_PRV_DROP_FRAC`` (15%).
-
-    Mutates ``ctx`` in place (persisted inside ``simulated_room_state['_micro_arousal_ctx']``).
-    """
-    if now_utc.tzinfo is None:
-        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    # Flag a micro-arousal when a noise spike is followed by PRV drop.
+    now_utc = to_utc_datetime(now_utc)
     now_ts = now_utc.timestamp()
 
     ring = list(ctx.get("prv_ring") or [])
@@ -480,7 +418,7 @@ def micro_arousal_tick(
 
     created: Optional[MicroArousalEvent] = None
 
-    # Arm window on spike **edge** relative to calibrated baseline (>8 dB).
+    # Start checking when we hit a noise spike edge.
     if rising_edge and ambient_noise_db is not None:
         median_snap = _median_nonneg(ring)
         ctx["pending_spike_ts"] = now_ts
@@ -557,7 +495,7 @@ def micro_arousal_tick(
 
 
 def optimal_temp_upper_celsius(ref_user: Optional[User]) -> float:
-    """Upper bound (°C) for the persisted optimal Fahrenheit sleep band."""
+    # Upper bound (C) of saved optimal Fahrenheit band.
     if ref_user is not None:
         hi_f = float(ref_user.cfg_optimal_band_f_max or 68.0)
     else:

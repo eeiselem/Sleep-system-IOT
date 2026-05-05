@@ -1,5 +1,3 @@
-"""Persisted heuristic events: discrete PRV-drop soon after acoustic spikes."""
-
 from db import db
 from utils import get_current_utc_time
 

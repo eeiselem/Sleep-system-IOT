@@ -10,15 +10,31 @@
 <body {% block body_attr %}class="app-shell"{% endblock %}>
     <div class="nav-bar">
         <h2>Sleep Studio</h2>
-        <div>
-            <a href="/dashboard">Dashboard</a>
-             |
-            <a href="/logout" style="color: #d12643;">Logout</a>
+        <div class="nav-dash">
+            {% if current_user.is_authenticated %}
+            <nav class="nav-dash-links" aria-label="Main">
+                <a href="{{ url_for('dashboard.overview') }}">Overview</a>
+                <span class="nav-dash-sep" aria-hidden="true">|</span>
+                <a href="{{ url_for('dashboard.configure') }}">Configuration</a>
+                <span class="nav-dash-sep" aria-hidden="true">|</span>
+                <a href="{{ url_for('dashboard.control_center') }}">Control</a>
+                <span class="nav-dash-sep" aria-hidden="true">|</span>
+                <a href="{{ url_for('dashboard.data') }}">Sleep data</a>
+                {% if current_user.role == 'Admin' %}
+                <span class="nav-dash-sep" aria-hidden="true">|</span>
+                <a href="{{ url_for('dashboard.admin_console') }}">Admin</a>
+                {% endif %}
+            </nav>
+            {% endif %}
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('auth.logout') }}" class="nav-dash-logout">Logout</a>
+            {% endif %}
         </div>
     </div>
 
     <div class="content">
         {% block content %}{% endblock %}
     </div>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

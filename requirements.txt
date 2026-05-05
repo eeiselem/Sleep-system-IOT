@@ -3,6 +3,8 @@ Flask
 Flask-Bcrypt
 Flask-Login
 Flask-SQLAlchemy
+Flask-Migrate
+alembic
 openai>=1.0.0
 pycryptodome>=3.19.0
 pydantic>=2.0.0

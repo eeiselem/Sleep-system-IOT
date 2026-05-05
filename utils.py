@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
-# look for .env file and load environment variables from it to memor
+# load values from .env
 load_dotenv()
 
-# Same secret string as MASTER_ENCRYPTION_KEY (.env); SHA-256 expands to AES-256 key bytes.
+# derive 32-byte AES key from env secret
 _master_raw = os.getenv("MASTER_ENCRYPTION_KEY") or ""
 master_key = _master_raw.encode("utf-8")
 aes_256_key = hashlib.sha256(master_key).digest()
@@ -22,12 +22,24 @@ def get_current_utc_time():
     return datetime.now(timezone.utc)
 
 
+def to_float_or_none(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def mean_or_none(values: list[Optional[float]]) -> Optional[float]:
+    clean = [v for v in values if v is not None]
+    if not clean:
+        return None
+    return sum(clean) / len(clean)
+
+
 def try_aes256_gcm_decrypt_b64(blob_b64: str) -> Optional[str]:
-    """
-    AES-256-GCM decrypt for transport / at-rest blobs:
-    base64(nonce12 || tag16 || ciphertext).
-    Returns plaintext UTF-8 string, or None if format/tag is invalid.
-    """
+    # base64(nonce12 + tag16 + ciphertext) -> plaintext or None
     if not blob_b64 or blob_b64 == "N/A":
         return None
     try:
@@ -57,7 +69,7 @@ def encrypt_at_rest(data: str) -> str:
 
 
 def decrypt_at_rest(data: str) -> str:
-    """Strict AES-256-GCM envelope helper (SQLite at-rest payloads)."""
+    # strict decrypt helper for DB values
     if not data or data == "N/A":
         return data
     pt = try_aes256_gcm_decrypt_b64(str(data))
@@ -67,10 +79,7 @@ def decrypt_at_rest(data: str) -> str:
 
 
 def format_temperature_fahrenheit_display(value: Any) -> str:
-    """
-    Format a room-temperature sample for UI in °F.
-    Stored / decrypted plaintext from readings is Celsius; pass through non-numeric states.
-    """
+    # UI temp display in Fahrenheit (stored values are Celsius).
     if value is None:
         return "-"
     s = str(value).strip()
@@ -93,11 +102,7 @@ def format_temperature_fahrenheit_display(value: Any) -> str:
 
 
 def ingest_field_plaintext(raw: Optional[str]) -> Optional[str]:
-    """
-    Normalize /post-data field values after JSON parse:
-    • AES-256-GCM transport blobs (nonce||tag||ciphertext, Base64 — matches firmware)
-    • Plain numeric/string payloads (development / plaintext edge hardware only)
-    """
+    # Normalize incoming fields: decrypt when needed, else keep plaintext.
     if raw is None:
         return None
     s = str(raw).strip()
@@ -111,7 +116,7 @@ def ingest_field_plaintext(raw: Optional[str]) -> Optional[str]:
     return s
 
 
-# Backwards compatibility for call sites that referenced decrypt_data
+# keep old helper name used in older call sites
 def decrypt_data(data: str) -> str:
     if not data or data == "N/A":
         return data
@@ -125,7 +130,7 @@ def decrypt_data(data: str) -> str:
 
 
 def decrypt_stored_reading_field(blob: Optional[str]) -> Optional[str]:
-    """Decrypt DB columns storing AES-256-GCM ciphertext (Base64)."""
+    # decrypt DB field (returns plaintext or None)
     if blob is None:
         return None
     blob_s = str(blob).strip()
@@ -145,17 +150,15 @@ def _pkcs7_unpad(data: bytes) -> bytes:
     return data[:-pad]
 
 
-def decrypt_biometric_aes128_cbc_b64(b64_ciphertext: str) -> Tuple[Optional[dict[str, Any]], Optional[str]]:
-    """
-    Decrypt teammate ``biometric.ino`` transport: Base64(AES-128-CBC + PKCS#7).
-    Key/IV default to the 16-byte strings in that sketch; override with
-    BIOMETRIC_AES_KEY / BIOMETRIC_AES_IV in .env (UTF-8, must be length 16).
-    Returns (json_dict, error_message).
-    """
+def decrypt_biometric_aes128_cbc_b64(
+    b64_ciphertext: str,
+) -> Tuple[Optional[dict[str, Any]], Optional[str]]:
+    # Decrypt biometric.ino payload. Returns (json_dict, error_message).
     raw = (b64_ciphertext or "").strip()
     if not raw:
         return None, "empty body"
-    # Match ``biometric.ino``: mbedtls uses 16-byte key/IV buffers; 15-char literals are NUL-padded.
+    # biometric.ino pads to 16 bytes; match that here.
+
     def _pad16(s: str) -> bytes:
         b = s.encode("utf-8")
         return (b[:16] + b"\x00" * 16)[:16]
@@ -177,20 +180,16 @@ def decrypt_biometric_aes128_cbc_b64(b64_ciphertext: str) -> Tuple[Optional[dict
     return obj, None
 
 
-# Gyro / activity column: MPU boards store variance (~0–0.3); biometric boards store 0–100 activity %.
-# We first map raw samples to an internal 0–100 "motion stress" axis (0 = still, 100 = highly restless),
-# then expose **restful efficiency** = 100 − motion_stress (positive health: 100 = best).
+# map raw gyro/activity to motion stress, then invert to restful score
 RESTLESSNESS_MPU_STILL_MAX = 0.10
 RESTLESSNESS_MPU_MODERATE_MAX = 0.22
-# Raw variance at or above this maps internal motion stress to 100 (piecewise ramp from MODERATE_MAX).
+# cap raw MPU variance mapping at this point
 RESTLESSNESS_MPU_RAW_CAP = 0.36
 RESTLESSNESS_BIOMETRIC_SCALE_MIN = 1.0
 
 
 def _motion_stress_0_still_100_restless(raw: Any) -> Optional[float]:
-    """
-    Internal axis: 0 = still, 100 = highly restless (before inversion to restful efficiency).
-    """
+    # internal axis: 0 still, 100 restless
     if raw is None:
         return None
     try:
@@ -203,7 +202,11 @@ def _motion_stress_0_still_100_restless(raw: Any) -> Optional[float]:
         return round(min(100.0, max(0.0, v)), 2)
     if v <= 0.0:
         return 0.0
-    a, b, cap = RESTLESSNESS_MPU_STILL_MAX, RESTLESSNESS_MPU_MODERATE_MAX, RESTLESSNESS_MPU_RAW_CAP
+    a, b, cap = (
+        RESTLESSNESS_MPU_STILL_MAX,
+        RESTLESSNESS_MPU_MODERATE_MAX,
+        RESTLESSNESS_MPU_RAW_CAP,
+    )
     if v <= a:
         sc = (v / a) * 20.0 if a > 0 else 0.0
     elif v <= b:
@@ -216,14 +219,7 @@ def _motion_stress_0_still_100_restless(raw: Any) -> Optional[float]:
 
 
 def restlessness_score_from_raw(raw: Any) -> Optional[float]:
-    """
-    **Restful efficiency** (positive health), 0–100, from the stored gyro/activity column.
-
-    100 = excellent (still / minimal motion); 0 = poor (high movement). MPU variance and
-    biometric activity % both pass through a motion-stress map, then ``100 - stress``.
-
-    JSON/API field name remains ``restlessness_score`` for compatibility. Returns None if not finite.
-    """
+    # convert stored gyro/activity to restful efficiency (0..100)
     stress = _motion_stress_0_still_100_restless(raw)
     if stress is None:
         return None
@@ -231,7 +227,7 @@ def restlessness_score_from_raw(raw: Any) -> Optional[float]:
 
 
 def format_restlessness_band_from_score(score: float) -> Optional[str]:
-    """Qualitative band for restful efficiency (0–100): high = still / restful, low = restless."""
+    # label for restful efficiency band
     if math.isnan(score) or math.isinf(score):
         return None
     sc = min(100.0, max(0.0, score))
@@ -243,7 +239,7 @@ def format_restlessness_band_from_score(score: float) -> Optional[str]:
 
 
 def format_restlessness_label_from_float(raw_value: float) -> Optional[str]:
-    """Map a raw numeric gyro / activity sample to a qualitative band (via normalized score)."""
+    # helper: raw float -> label
     sc = restlessness_score_from_raw(raw_value)
     if sc is None:
         return None
@@ -251,10 +247,7 @@ def format_restlessness_label_from_float(raw_value: float) -> Optional[str]:
 
 
 def format_restlessness_label(raw: Any) -> Optional[str]:
-    """
-    Map stored gyro column text (decrypted plaintext number or biometric %) to a qualitative label.
-    Returns None if the value is not a plain finite number (caller may show decrypt errors verbatim).
-    """
+    # helper: stored raw value -> label
     sc = restlessness_score_from_raw(raw)
     if sc is None:
         return None

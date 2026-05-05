@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% from 'macros/dashboard.html' import display_live_metric, metric_info_tip, live_metric_tile %}
+
+{% block title %}Sleep · Overview{% endblock %}
+
+{% block head_extra %}
+{% set include_marked = true %}
+{% include "includes/dash_assets.html" %}
+{% endblock %}
+
+{% block body_attr %}class="app-shell app-dashboard dash-body"{% endblock %}
+
+{% block content %}
+<div class="dash-page">
+    <p class="text-lg font-semibold tracking-tight text-zinc-100 sm:text-xl">
+        Welcome, {{ user.username }}
+    </p>
+
+    <section class="dash-hero" aria-labelledby="sleep-readiness-label">
+        <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(212,175,55,0.12),transparent_50%)]"></div>
+        <span id="sleep-readiness-label" class="sr-only">Sleep score</span>
+        <div class="pointer-events-auto dash-hero-metric-tip-wrap">
+            {{ metric_info_tip('About your current sleep score', 'Your sleep score (0 to 100) summarizes recovery and sleep quality from the most recent completed night we have scored, using metrics collected during that session. Dates use your local time zone and appear after the session is processed.') }}
+        </div>
+        <div class="flex flex-wrap items-center gap-x-1.5 pr-12 sm:pr-14">
+            <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Sleep score</span>
+        </div>
+        <div class="mt-2 text-6xl font-extrabold tracking-tight text-zinc-600 sm:text-7xl transition-all duration-300" id="sleep-readiness-value" aria-live="polite">-</div>
+        <p class="mt-2 text-sm text-zinc-400" id="sleep-readiness-sub">Syncing…</p>
+    </section>
+
+    <section class="dash-card" aria-labelledby="sleep-score-history-label">
+        <h2 id="sleep-score-history-label" class="dash-h2 dash-h2--flat">
+            Sleep score over time
+        </h2>
+        <p class="mb-4 max-w-3xl text-[0.82rem] leading-relaxed text-zinc-500">
+            Recent completed nights (local wake date); one score per night when several sessions exist.
+        </p>
+        <div class="dash-score-chart-shell">
+            <div class="pointer-events-auto dash-score-chart-metric-tip-wrap">
+                {{ metric_info_tip('About this chart', 'Each point is the algorithmic sleep score (0 to 100) for a completed night, keyed by wake date in your local time zone. If more than one session ends on the same calendar date, the newest session wins. The line shows how your scored recovery changes across recent nights.') }}
+            </div>
+            <div class="dash-score-chart-host">
+                <canvas id="sleepScoreHistoryChart" aria-label="Sleep score over time"></canvas>
+            </div>
+        </div>
+        <p id="sleep-score-history-status" class="mt-2 text-[0.82rem] text-zinc-400" role="status"></p>
+    </section>
+
+    <div class="flex flex-col gap-5 sm:gap-6">
+        <div class="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2 lg:gap-5">
+        <div id="live-conditions-card" class="dash-card dash-card--trans">
+            <h2 class="dash-h2">Current Conditions</h2>
+            <p><strong>Clock:</strong> <span id="live-clock"></span></p>
+
+            <hr class="my-5 border-0 border-t border-white/10">
+
+            <h1 class="mt-4 text-center text-5xl font-semibold tracking-tight text-zinc-100">
+                <span class="temp-val dash-temp-tier-neutral">{{ current_temperature|temp_f }}</span><span class="text-zinc-500">°F</span>
+            </h1>
+            <p id="live-age-temperature" class="live-metric-age mt-1 text-center text-[10px] text-zinc-500" title=""></p>
+            <p class="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-sm text-zinc-500">
+                <span class="inline-flex flex-wrap items-center justify-center gap-x-1">
+                    <span>Humidity:</span>
+                    <span class="hum-val dash-metric-val dash-metric-tier-neutral text-base font-semibold tabular-nums" id="live-humidity">{{ display_live_metric(current_humidity) }}</span><span class="tabular-nums">%</span>
+                </span>
+                {{ metric_info_tip('About humidity', 'Relative humidity (%RH) at the sensor. Optimal sleep environment: 40% - 60%.') }}
+            </p>
+            <p id="live-age-humidity" class="live-metric-age mt-0.5 text-center text-[10px] text-zinc-500" title=""></p>
+
+            {% set condition_tiles = [
+                {'label': 'Heart rate', 'id': 'live-heart-rate', 'unit': ' bpm', 'value': current_heart_rate, 'age_id': 'live-age-heart-rate', 'tip_aria': 'About heart rate', 'tip_text': 'Instantaneous heart rate (bpm) from your sensor. Optimal resting baseline varies by user. Typically lowers during deep sleep.'},
+                {'label': 'SpO₂', 'id': 'live-spo2', 'unit': ' %', 'value': current_spo2, 'age_id': 'live-age-spo2', 'tip_aria': 'About SpO₂', 'tip_text': 'SpO₂ is blood oxygen saturation. For healthy adults at rest, 95% or higher is typically normal; consistently lower values warrant medical attention. Optimal: > 95%.'},
+                {'label': 'Ambient noise', 'id': 'live-ambient-noise', 'unit': ' dB', 'value': current_ambient_noise, 'age_id': 'live-age-ambient-noise', 'tip_aria': 'About ambient noise', 'tip_text': 'Sound level in dB at the sensor. Sustained highs or sharp spikes can track disturbances. Optimal for sleep: < 40 dB. Spikes may cause micro-arousals.'},
+                {'label': 'Air quality score', 'id': 'live-voc', 'unit': ' /100', 'value': current_voc, 'age_id': 'live-age-voc', 'tip_aria': 'About air quality score', 'tip_text': 'Single device score derived from your gas / VOC-type sensor channel (e.g. MQ-135 style). Scale: 1-100 where 100 is best and cleaner air. Lower scores indicate poorer air quality and may disrupt breathing and recovery.'},
+                {'label': 'Restful efficiency', 'id': 'live-restlessness', 'unit': ' /100', 'value': current_restlessness_score, 'age_id': 'live-age-restlessness', 'tip_aria': 'About restful efficiency', 'tip_text': 'Restful efficiency (0 to 100) is a positive-health motion score from your bed sensor data: 100 means very still / restful, 0 means high movement. Bands: 80 to 100 excellent; 50 to 79 moderate; under 50 restless. The API field is still named restlessness_score for compatibility. Optimal: > 85/100. Lower scores indicate high movement or tossing.'},
+                {'label': 'Current lumens', 'id': 'live-lumens', 'unit': ' lx', 'value': current_ambient_light, 'age_id': 'live-age-lumens', 'tip_aria': 'About room light', 'tip_text': 'Mapped from the room light sensor. Values are shown in lux, a measure of illuminance at the sensor (not total fixture lumens). Optimal for sleep: < 2 lx (Pitch black).'}
+            ] %}
+            <dl class="mt-5 grid grid-cols-2 gap-x-3 gap-y-3 text-left text-sm sm:gap-x-4">
+                {% for tile in condition_tiles %}
+                    {{ live_metric_tile(tile.label, tile.id, tile.unit, tile.value, tile.age_id, tile.tip_aria, tile.tip_text) }}
+                {% endfor %}
+            </dl>
+        </div>
+
+        <div class="dash-card dash-card--trans" id="morning-review-card">
+            <h2 class="dash-h2">Morning Review</h2>
+            <div class="flex gap-1 rounded-2xl bg-black/35 p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Morning review sections">
+                <button type="button" class="flex-1 rounded-xl py-2.5 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-100 shadow-inner ring-1 ring-amber-500/25 transition-all duration-200 bg-amber-500/15" role="tab" id="morning-review-tab-today-btn" aria-selected="true" aria-controls="morning-review-tab-today-panel">Today&apos;s review</button>
+                <button type="button" class="flex-1 rounded-xl py-2.5 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-500 transition-all duration-200 hover:text-zinc-300" role="tab" id="morning-review-tab-history-btn" aria-selected="false" aria-controls="morning-review-tab-history-panel">History</button>
+            </div>
+
+            <div id="morning-review-tab-today-panel" class="morning-review-tab-panel" role="tabpanel" aria-labelledby="morning-review-tab-today-btn">
+            <p class="morning-review-lede mt-1 text-[0.85rem] text-zinc-400">
+                Your star rating is <strong class="text-zinc-300">ground truth</strong> for how that night felt,
+                stored alongside the algorithmic sleep score for the wake date
+                (<strong><span id="morning-review-session-label">…</span></strong>).
+            </p>
+
+            <div id="morning-review-loading" class="text-[0.88rem] text-zinc-400">Loading review status…</div>
+
+            <div id="morning-review-empty" class="hidden">
+                <form id="morning-review-form-new" class="flex flex-col gap-2">
+                    <label class="dash-form-label" for="morning-review-rating-new">Sleep quality (1 to 5 stars)</label>
+                    <select id="morning-review-rating-new" class="dash-inp" required>
+                        <option value="">Choose rating…</option>
+                        <option value="1">1: Very poor</option>
+                        <option value="2">2: Poor</option>
+                        <option value="3">3: Fair</option>
+                        <option value="4">4: Good</option>
+                        <option value="5">5: Excellent</option>
+                    </select>
+                    <label class="mt-2 dash-form-label" for="morning-review-notes-new">Notes (optional)</label>
+                    <textarea id="morning-review-notes-new" class="dash-textarea" rows="3" placeholder="Dreams, wake-ups, caffeine, stress, anything that affected sleep…"></textarea>
+                    <button type="submit" class="dash-btn mt-2 w-full">Submit review</button>
+                </form>
+            </div>
+
+            <div id="morning-review-summary" class="hidden">
+                <p class="mt-2 mb-1.5">
+                    <strong>Rating:</strong>
+                    <span id="morning-review-star-visual" aria-hidden="true"></span>
+                    <span id="morning-review-rating-num" class="ml-1.5"></span>
+                </p>
+                <p id="morning-review-algorithm-wrap" class="hidden mb-1.5 text-[0.88rem] text-zinc-400">
+                    <strong class="text-zinc-300">Sleep score (algorithm) at save:</strong>
+                    <span id="morning-review-algorithm-score">-</span>
+                </p>
+                <p id="morning-review-note-display" class="morning-review-note-body whitespace-pre-wrap text-[0.88rem] text-zinc-400"></p>
+                <button type="button" id="morning-review-modify-btn" class="dash-btn mt-2 w-full">Modify Rating</button>
+            </div>
+
+            <div id="morning-review-edit" class="hidden">
+                <form id="morning-review-form-edit" class="flex flex-col gap-2">
+                    <input type="hidden" id="morning-review-session-date-edit" value="">
+                    <label class="dash-form-label" for="morning-review-rating-edit">Sleep quality (1 to 5 stars)</label>
+                    <select id="morning-review-rating-edit" class="dash-inp" required>
+                        <option value="1">1: Very poor</option>
+                        <option value="2">2: Poor</option>
+                        <option value="3">3: Fair</option>
+                        <option value="4">4: Good</option>
+                        <option value="5">5: Excellent</option>
+                    </select>
+                    <label class="mt-2 dash-form-label" for="morning-review-notes-edit">Notes (optional)</label>
+                    <textarea id="morning-review-notes-edit" class="dash-textarea" rows="3" placeholder="Optional…"></textarea>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <button type="submit" class="dash-btn dash-btn--grow">Save changes</button>
+                        <button type="button" id="morning-review-cancel-btn" class="dash-btn-danger dash-btn--grow">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            </div>
+
+            <div id="morning-review-tab-history-panel" class="morning-review-tab-panel" role="tabpanel" aria-labelledby="morning-review-tab-history-btn" hidden>
+                <p class="morning-review-lede mt-1 text-[0.82rem] text-zinc-500/90">
+                    Recent wake dates (local): stars, notes, and algorithmic sleep score (from the snapshot at save when available).
+                </p>
+                <div id="morning-review-history-loading" class="hidden text-[0.86rem] text-zinc-400">Loading history…</div>
+                <div id="morning-review-history-list-wrap" class="morning-review-history-stack"></div>
+                <p id="morning-review-history-empty" class="morning-review-history-empty hidden"></p>
+            </div>
+
+            <p id="morning-review-status-msg" class="mt-2.5 text-[0.85rem] text-zinc-400"></p>
+        </div>
+
+        </div>
+    </div>
+</div>
+
+{% include "includes/sleep_coach_panel.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% include "includes/chartjs_dashboard.html" %}
+<script>
+    window.__DASH_BOOT__ = { page: 'overview', live: {{ live_readings_initial | tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

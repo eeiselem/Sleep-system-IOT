@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% from 'macros/dashboard.html' import metric_info_tip, sleep_chart %}
+
+{% block title %}Sleep · Session data{% endblock %}
+
+{% block head_extra %}
+{% include "includes/dash_assets.html" %}
+{% endblock %}
+
+{% block body_attr %}class="app-shell app-dashboard dash-body"{% endblock %}
+
+{% block content %}
+<div class="dash-page">
+    <p class="text-lg font-semibold tracking-tight text-zinc-100 sm:text-xl">
+        Welcome, {{ user.username }}
+    </p>
+    <p class="mt-1 max-w-2xl text-[0.82rem] text-zinc-500">Explore per-night sensor timelines, weekly trends, and (admin) threshold event search.</p>
+
+    <div class="dash-card dash-card--wide dash-card--trans mt-5">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <h2 class="dash-h2 dash-h2--flat border-b border-white/10 pb-3 sm:mb-0 sm:border-0 sm:pb-0">Sleep Session Data</h2>
+            <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+                <label class="dash-select-field dash-select-field--min-10" for="sleep-history-mode">
+                    <span class="dash-form-label dash-form-label--caps">View mode</span>
+                    <select id="sleep-history-mode" class="dash-inp dash-inp--sm min-w-[11rem]">
+                        <option value="single-night">Single Night View</option>
+                        <option value="weekly-trends">Weekly trends (7 nights, multi-metric)</option>
+                    </select>
+                </label>
+                <label id="sleep-session-select-label" class="dash-select-field dash-select-field--min-18 hidden" for="sleep-session-select">
+                    <span class="dash-form-label dash-form-label--caps">Sleep session</span>
+                    <select id="sleep-session-select" class="dash-inp dash-inp--sm w-full sm:min-w-[22rem]"></select>
+                </label>
+            </div>
+        </div>
+        <p class="mt-2 text-[0.82rem] leading-relaxed text-zinc-500">
+            Single night: ASLEEP to wake (active sessions run to "now"). All dates, times, chart axes, and tooltips use <strong class="font-medium text-zinc-400">your browser's local time zone</strong>. Pan/zoom syncs across metrics.
+        </p>
+
+        <div id="sleep-single-night-wrap" class="hidden">
+            <div class="my-3 flex flex-wrap items-center gap-2">
+                <button type="button" id="sleep-night-reset-zoom" class="dash-btn px-4">Reset Zoom</button>
+                <span class="ml-0 text-[0.78rem] text-zinc-500 sm:ml-2">
+                    Drag to pan horizontally; scroll or pinch on the charts to zoom the time axis.
+                </span>
+            </div>
+            <p class="dash-sleep-metric-label mt-6">Per-metric timelines</p>
+            <div class="mt-4 flex flex-col gap-6">
+                {{ sleep_chart('Room temperature', 'About this temperature chart', 'Room air temperature from each environmental sample during the sleep window (stored in °C, shown in °F). When no samples exist for this metric, a faint placeholder curve illustrates the chart scale.', 'sleep-wrap-room_temp_f', 'sleepChartTemp') }}
+                {{ sleep_chart('Humidity', 'About this humidity chart', 'Relative humidity (%RH) from each environmental sample. Placeholder curve appears when this session has no humidity points in the window.', 'sleep-wrap-humidity', 'sleepChartHumidity') }}
+                {{ sleep_chart('Heart rate', 'About this heart rate chart', 'Instantaneous heart rate (bpm) from each biometric sample during this sleep window. Shape reflects sleep stages, movement, and brief arousals; compare curve patterns across nights rather than single points.', 'sleep-wrap-heart_rate', 'sleepChartHr') }}
+                {{ sleep_chart('SpO₂', 'About this SpO₂ chart', 'SpO₂ is blood oxygen saturation. For healthy adults at rest, 95% or higher is typically normal; consistently lower values warrant medical attention.', 'sleep-wrap-spo2', 'sleepChartSpo2') }}
+                {{ sleep_chart('HRV / PRV', 'About this HRV / PRV chart', 'HRV (heart rate variability) and PRV (pulse rate variability) describe beat-to-beat timing variation. Higher resting variability is often associated with recovery; trends are more useful than single-night absolutes.', 'sleep-wrap-prv_ms', 'sleepChartPrv') }}
+                {{ sleep_chart('Room light', 'About this light chart', 'Mapped from the room light sensor. Values are shown in lux, a measure of illuminance at the sensor (not total fixture lumens).', 'sleep-wrap-ambient_light', 'sleepChartLight') }}
+                {{ sleep_chart('Air quality score', 'About this air quality chart', 'Single device score derived from your gas / VOC-type sensor channel (e.g. MQ-135 style). Scale: 1-100 where 100 is best and cleaner air. Lower scores indicate poorer air quality and may disrupt breathing and recovery.', 'sleep-wrap-voc', 'sleepChartVoc') }}
+                {{ sleep_chart('Ambient noise', 'About this noise chart', 'Sound level in dB at the sensor during the sleep window. Sustained highs or sharp spikes can track disturbances that may line up with movement or arousals on other timelines.', 'sleep-wrap-ambient_noise', 'sleepChartNoise') }}
+                {{ sleep_chart('Restful efficiency', 'About this restful efficiency chart', 'Restful efficiency (0 to 100) is a positive-health motion score: 100 = very still / restful, 0 = high movement. Bands: 80 to 100 excellent; 50 to 79 moderate; under 50 restless.', 'sleep-wrap-gyro_variance', 'sleepChartGyro') }}
+            </div>
+            <p id="sleep-single-night-status" class="mt-2.5 min-h-[1.25rem] text-[0.85rem] text-zinc-400" aria-live="polite"></p>
+        </div>
+
+        <div id="sleep-weekly-wrap" class="hidden mt-4">
+            <p class="mb-2 max-w-3xl text-[0.82rem] leading-relaxed text-zinc-500">
+                Up to <strong class="font-medium text-zinc-400">seven</strong> completed nights: per-metric nightly means scaled <strong class="font-medium text-zinc-400">0 to 100 within the week</strong> so mixed units share one axis; tooltips show raw values in your local time zone.
+            </p>
+            <p id="sleep-weekly-means-summary" class="mb-3 text-[0.78rem] leading-relaxed text-zinc-500"></p>
+            <div class="sleep-metric-chart-head mb-2 border-b border-white/5 pb-2">
+                <span class="dash-sleep-metric-label">Weekly trend chart</span>
+                {{ metric_info_tip('About this weekly chart', 'One multi-series line chart: each metric’s per-night average over the sleep window is scaled to 0 to 100 within the displayed week so different units are comparable. Legend toggles series; tooltips show raw values and the within-week relative position, using your local time zone.') }}
+            </div>
+            <div id="sleep-weekly-charts-root" class="grid grid-cols-1 gap-4"></div>
+            <p id="sleep-weekly-status" class="mt-3 min-h-[1.25rem] text-[0.82rem] text-zinc-400" role="status"></p>
+        </div>
+    </div>
+
+    {% if current_user.role == 'Admin' %}
+    <div class="dash-card dash-card--wide dash-card--trans dash-card--mb mt-5">
+        <h2 class="dash-h2">System Event Log</h2>
+        <p class="my-2.5 mb-3 text-[0.82rem] leading-relaxed text-zinc-500">
+            Filter readings by metric, numeric threshold, and above/below. Results show times in <strong class="text-zinc-400">your local time zone</strong> (cap 1200 rows). Optional date range; otherwise the default scope is the <strong class="text-zinc-400">last 7 calendar days</strong>.
+        </p>
+
+        {% if event_log_error %}
+        <div class="mb-4 rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">
+            {{ event_log_error }}
+        </div>
+        {% endif %}
+
+        <form id="event-log-search-form" action="{{ url_for('dashboard.event_log_search') }}" method="post" class="flex flex-col gap-3">
+            <label class="dash-form-label" for="evt-start">Start (optional, local)</label>
+            <input type="datetime-local" id="evt-start" name="start_time" value="{{ session.get('start_datetime') or '' }}" class="dash-inp">
+
+            <label class="dash-form-label" for="evt-end">End (optional, local)</label>
+            <input type="datetime-local" id="evt-end" name="end_time" value="{{ session.get('end_datetime') or '' }}" class="dash-inp">
+
+            <label class="dash-form-label" for="evt-metric">Metric</label>
+            <select id="evt-metric" name="metric" class="dash-inp" required>
+                <option value="" disabled {% if not (session.get('event_metric') or '').strip() %}selected{% endif %}>Select metric…</option>
+                {% for mk, lbl in event_log_breach_labels.items() %}
+                <option value="{{ mk }}" {% if (session.get('event_metric') or '') == mk %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+            </select>
+
+            <label class="dash-form-label" for="evt-threshold">Threshold</label>
+            <input
+                type="number"
+                id="evt-threshold"
+                name="threshold"
+                step="any"
+                required
+                value="{{ session.get('event_threshold') or '' }}"
+                placeholder="e.g. 180 (HR bpm), 92 (SpO₂ %), 25 (temp °C in DB), 50 (noise dB)"
+                class="dash-inp"
+            >
+
+            <label class="dash-form-label" for="evt-direction">Comparison</label>
+            <select id="evt-direction" name="direction" class="dash-inp">
+                <option value="above" {% if (session.get('event_direction') or 'below') == 'above' %}selected{% endif %}>Above (&gt;)</option>
+                <option value="below" {% if (session.get('event_direction') or 'below') != 'above' %}selected{% endif %}>Below (&lt;)</option>
+            </select>
+        </form>
+
+        <form id="event-log-clear-form" action="{{ url_for('dashboard.clear_event_log_search') }}" method="post"></form>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+            <button type="submit" form="event-log-search-form" class="dash-btn dash-btn--grow py-2.5">Search thresholds</button>
+            <button type="submit" form="event-log-clear-form" class="dash-btn-danger dash-btn--grow py-2.5">Clear</button>
+        </div>
+
+        {% if breach_table_rows is not none %}
+        <hr class="my-6 border-0 border-t border-white/10">
+        <h3 class="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Threshold timestamps</h3>
+
+        {% if event_log_summary %}
+        <div class="mb-4 rounded-xl border border-teal-500/25 bg-teal-950/30 px-4 py-3 text-sm text-teal-100/95">{{ event_log_summary }}</div>
+        {% endif %}
+
+        {% if breach_table_rows|length > 0 %}
+        <div class="max-h-[28rem] overflow-auto rounded-xl border border-white/10 shadow-inner shadow-black/50">
+            <table class="w-full border-collapse text-left text-sm">
+                <thead>
+                    <tr class="sticky top-0 z-10 border-b border-white/10 bg-zinc-950/95 backdrop-blur-sm">
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Row ID</th>
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Time (local)</th>
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Observed value{% if event_metric_highlight %}: {{ event_log_breach_labels[event_metric_highlight] }}{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody class="text-zinc-300">
+                    {% for row in breach_table_rows %}
+                    <tr class="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors duration-150">
+                        <td class="px-3 py-2.5 align-top tabular-nums text-zinc-500">{{ row.id }}</td>
+                        <td class="px-3 py-2.5 align-top">
+                            <span class="utc-table-time tabular-nums text-zinc-400">
+                                {% if row.timestamp %}
+                                    {{ row.timestamp.isoformat() }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="px-3 py-2.5 align-top font-semibold text-teal-300">{{ row.value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-2.5 text-[0.78rem] text-zinc-500">
+            {{ breach_table_rows|length }} matching sample(s). Values are decrypted on read like the dashboard tiles.
+        </p>
+        {% else %}
+        <p class="py-6 text-center text-sm text-zinc-500">
+            No samples matched this rule in the chosen window.
+        </p>
+        {% endif %}
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "includes/chartjs_dashboard.html" %}
+<script>
+    window.__DASH_BOOT__ = { page: 'data', live: {{ live_readings_initial | tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

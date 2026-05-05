@@ -1,31 +1,29 @@
 from datetime import date
 from typing import Any, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
-
-
-# pydantic models catch data before hits the database, validate and cleans it
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class AppBaseModel(BaseModel):
-    # form_attributes allows Pydantic to read from ORM objects directly
+    # allow ORM object parsing
     model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
 
     @field_validator("*", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: Any) -> Any:
-        """
-        Intercepts all incoming data and converts blank or whitespace-only
-        strings into None (Null) to prevent database corruption.
-        """
-        # only attempt to strip() if the incoming data is text
+        # turn blank strings into None
         if isinstance(v, str) and not v.strip():
             return None
-        # If valid text or number, let it pass through unchanged
         return v
 
 
-# ensure data is two strings after AppBaseModel does cleaning and validation
 class ReadingBase(AppBaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -35,7 +33,9 @@ class ReadingBase(AppBaseModel):
 
     temperature: str
     humidity: str
-    air_quality: str = Field(validation_alias=AliasChoices("air_quality", "voc_level"))
+    air_quality: str = Field(
+        validation_alias=AliasChoices("air_quality", "voc_level"),
+    )
     ambient_noise: str
     ambient_light: Optional[str] = Field(
         default=None,
@@ -47,11 +47,7 @@ class ReadingBase(AppBaseModel):
 
 
 class EnvironmentReadingIn(AppBaseModel):
-    """
-    Environmental-only board: ``POST /post-environment`` (JSON body, same ingest key as /post-data).
-
-    No MAX301 / vitals — heart_rate and spo2 are omitted (stored NULL). Optional MPU ``gyro_variance``.
-    """
+    # Payload from env-only board (/post-environment).
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -61,7 +57,9 @@ class EnvironmentReadingIn(AppBaseModel):
 
     temperature: str
     humidity: str
-    air_quality: str = Field(validation_alias=AliasChoices("air_quality", "voc_level"))
+    air_quality: str = Field(
+        validation_alias=AliasChoices("air_quality", "voc_level"),
+    )
     ambient_noise: str
     ambient_light: Optional[str] = Field(
         default=None,
@@ -71,11 +69,7 @@ class EnvironmentReadingIn(AppBaseModel):
 
 
 class BiometricPayload(AppBaseModel):
-    """
-    Inner JSON after AES-128-CBC decrypt from ``biometric.ino`` (POST /biometric).
-
-    ``gyro`` is that sketch's activity rating (%); stored in ``gyro_variance`` column.
-    """
+    # Inner payload after biometric decrypt.
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -101,13 +95,7 @@ class BiometricPayload(AppBaseModel):
 
 
 class SubjectiveSleepReviewIn(AppBaseModel):
-    """
-    Request body for POST /api/subjective-sleep-review.
-
-    Persisted by SQLAlchemy model ``schemas.subjective_sleep_review.SubjectiveSleepReview``
-    (physical table ``morning_sleep_feedback``). The server links each save to the
-    matching closed ``SleepSession`` and snapshots algorithmic readiness as ground-truth context.
-    """
+    # Body for POST /api/subjective-sleep-review.
 
     rating: int = Field(ge=1, le=5)
     notes: Optional[str] = None

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Sleep · Configuration{% endblock %}
+
+{% block head_extra %}
+{% set include_marked = true %}
+{% include "includes/dash_assets.html" %}
+{% endblock %}
+
+{% block body_attr %}class="app-shell app-dashboard dash-body"{% endblock %}
+
+{% block content %}
+<div class="dash-page">
+    <p class="text-lg font-semibold tracking-tight text-zinc-100 sm:text-xl">
+        Welcome, {{ user.username }}
+    </p>
+    <p class="mt-1 max-w-2xl text-[0.82rem] text-zinc-500">Adjust comfort guardrails, optimal temperature band, wake time, and sunrise demo ranges.</p>
+
+    <div class="dash-card dash-card--trans mt-5">
+            <h2 class="dash-h2">Configuration Panel</h2>
+            <p class="text-sm leading-relaxed text-zinc-400">
+                Define sleep monitoring thresholds and wake targets for your account.
+            </p>
+
+            <div class="mx-auto mt-6 flex w-full max-w-[800px] flex-col gap-5">
+                <section class="dash-cfg-section" aria-labelledby="cfg-card-env-heading">
+                    <h3 id="cfg-card-env-heading" class="dash-cfg-h3">Environmental Thresholds</h3>
+                    <div class="space-y-5">
+                        <div class="min-w-0">
+                            <label class="dash-form-label">Comfort range (°F)</label>
+                            <p class="mt-1 text-[0.78rem] leading-snug text-zinc-500">
+                                Full bar: absolute guardrails. Green band: optimal sleep temperature band.
+                            </p>
+                            <div class="mt-2 grid w-full min-w-0 grid-cols-2 gap-2">
+                                <input type="number" id="cfg-guardrail-f-min" step="0.5" inputmode="decimal" class="dash-inp dash-inp--tabular min-w-0" placeholder="Min °F">
+                                <input type="number" id="cfg-guardrail-f-max" step="0.5" inputmode="decimal" class="dash-inp dash-inp--tabular min-w-0" placeholder="Max °F">
+                            </div>
+                            <div id="cfg-temp-range-track" class="relative mt-4 h-11 w-full min-w-0 overflow-hidden rounded-xl bg-black/40 ring-1 ring-inset ring-white/10">
+                                <div id="cfg-temp-range-optimal" class="absolute inset-y-1 rounded-lg bg-gradient-to-r from-teal-400/35 via-teal-300/30 to-amber-400/35 shadow-[0_0_24px_rgba(126,242,197,0.12)]"></div>
+                            </div>
+                            <div class="mt-2 flex w-full min-w-0 justify-between gap-2 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                                <span id="cfg-temp-range-label-low" class="min-w-0 truncate">60°F</span>
+                                <span id="cfg-optimal-label" class="min-w-0 shrink text-center text-teal-300/90">Optimal:</span>
+                                <span id="cfg-temp-range-label-high" class="min-w-0 truncate text-right">75°F</span>
+                            </div>
+                            <label class="mt-3 flex w-full min-w-0 cursor-pointer items-start gap-2.5 text-sm leading-snug text-zinc-400">
+                                <input type="checkbox" id="cfg-override-optimal" class="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-600 bg-black/40 text-amber-500 focus:ring-amber-500/40">
+                                <span>Override optimal band <span class="text-xs text-zinc-600">(drag green band sideways)</span></span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dash-cfg-section dash-cfg-section--wake" aria-labelledby="cfg-card-wake-heading">
+                    <h3 id="cfg-card-wake-heading" class="dash-cfg-h3">Wake Schedule</h3>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="dash-form-label" for="cfg-wake-time">Target wake time</label>
+                            <p class="mt-1 text-[0.78rem] leading-snug text-zinc-500">Used for sunrise staging and countdown. Saved as the wake clock for your <strong class="font-medium text-zinc-400">next immediate sleep cycle</strong>; adjust any night before bed.</p>
+                            <input type="time" id="cfg-wake-time" class="dash-inp mt-2 max-w-[11rem]">
+                            <p class="mt-2 text-[0.82rem] text-zinc-400">
+                                <span class="text-zinc-500">Current target wake time:</span>
+                                <span id="cfg-wake-time-current" class="ml-1 font-semibold tabular-nums text-zinc-200">-</span>
+                            </p>
+                        </div>
+
+                        <div id="sunrise-card" class="dash-cfg-section dash-cfg-section--nested">
+                            <h4 class="dash-cfg-h4">Sunrise sequence</h4>
+                            <p class="mt-0 text-[0.85rem] leading-relaxed text-zinc-400">
+                                Visualizes backend-controlled ramp toward wake time. Use ranges below for demo staging; Run Demo plays a full ramp in <strong class="text-zinc-200">30 seconds</strong> (30-minute pacing).
+                            </p>
+
+                            <div class="mt-2 grid grid-cols-2 gap-2" aria-label="Sunrise demonstration ranges">
+                                <label class="dash-field-label">
+                                    Lumens min
+                                    <input type="number" id="sunrise-lumen-min" value="0" min="0" step="1" class="dash-inp dash-inp--sm mt-1 w-full">
+                                </label>
+                                <label class="dash-field-label">
+                                    Lumens max
+                                    <input type="number" id="sunrise-lumen-max" value="500" min="0" step="1" class="dash-inp dash-inp--sm mt-1 w-full">
+                                </label>
+                                <label class="dash-field-label">
+                                    Kelvin min
+                                    <input type="number" id="sunrise-kelvin-min" value="2000" min="1000" step="50" class="dash-inp dash-inp--sm mt-1 w-full">
+                                </label>
+                                <label class="dash-field-label">
+                                    Kelvin max
+                                    <input type="number" id="sunrise-kelvin-max" value="6500" min="1000" step="50" class="dash-inp dash-inp--sm mt-1 w-full">
+                                </label>
+                            </div>
+
+                            <button type="button" id="sunrise-demo-btn" class="dash-btn dash-btn--full mt-3">
+                                Run Demo
+                            </button>
+
+                            <div id="sunrise-track" class="relative mt-4 h-5 w-full overflow-hidden rounded-full bg-gradient-to-r from-[#1b263b] via-[#4a4e69] to-[#f4a261]">
+                                <div id="sunrise-progress" class="absolute inset-y-0 left-0 w-0 bg-gradient-to-r from-[rgba(255,205,86,0.2)] to-[rgba(255,205,86,0.75)] transition-[width] duration-300 ease-out"></div>
+                                <div id="sunrise-sun" class="absolute left-0 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffd166] shadow-[0_0_12px_rgba(255,209,102,0.8)] transition-[left] duration-300 ease-out"></div>
+                            </div>
+
+                            <p class="mt-2.5"><strong class="text-zinc-300">Status:</strong> <span id="sunrise-status">Loading...</span></p>
+                            <p class="my-1"><strong class="text-zinc-300">Wake Time:</strong> <span id="sunrise-wake-time">--:--</span></p>
+                            <p class="my-1"><strong class="text-zinc-300">Lumen:</strong> <span id="sunrise-lumen">--</span> lm</p>
+                            <p class="my-1"><strong class="text-zinc-300">Color Temp:</strong> <span id="sunrise-color-temp">--</span> K</p>
+                            <p class="my-1"><strong class="text-zinc-300">Minutes to Wake:</strong> <span id="sunrise-minutes">--</span></p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="config-panel-tech-logs mx-auto mt-6 w-full max-w-[800px] rounded-xl border border-white/10 bg-black/30 px-4 py-3 shadow-md ring-1 ring-inset ring-white/[0.06]">
+                <p class="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Outbound API Payload</p>
+                <pre class="dash-pre-log"><code id="outbound-payload-sunrise" class="font-mono text-teal-200/90">{{ '{}' }}</code></pre>
+            </div>
+
+            <div class="config-panel-action-row mx-auto mt-8 flex w-full max-w-[800px] flex-col gap-3">
+                <div class="flex flex-wrap justify-end gap-2">
+                    <button type="button" onclick="saveConfigPanel()" class="dash-btn dash-btn--grow px-4 py-2.5">Save Config</button>
+                    <button type="button" onclick="resetConfigPanel()" class="dash-btn-danger dash-btn--grow px-4 py-2.5">Reset</button>
+                </div>
+                <p id="config-status" class="text-sm leading-relaxed text-zinc-500">No saved configuration.</p>
+            </div>
+
+            {% if current_user.role == 'Admin' %}
+            <p class="mx-auto mt-4 w-full max-w-[800px] text-center text-xs italic leading-relaxed text-zinc-600">
+                Note: Physical HVAC/Smart Bulb endpoints disconnected. System is successfully generating and broadcasting state intent.
+            </p>
+            {% endif %}
+    </div>
+</div>
+{% include "includes/sleep_coach_panel.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.__DASH_BOOT__ = { page: 'configure', live: {{ live_readings_initial | tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

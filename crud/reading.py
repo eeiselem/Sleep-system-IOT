@@ -7,7 +7,7 @@ from schemas.reading import Reading
 from db import db
 
 
-# functions for creating and reading data from the database
+# DB helpers for reading rows
 
 EVENT_LOG_ALLOWED_METRICS = frozenset(
     {
@@ -28,8 +28,38 @@ EVENT_LOG_METRIC_LABELS = {
     "ambient_noise": "Ambient noise (dB)",
     "heart_rate": "Heart rate (bpm)",
     "spo2": "SpO₂ (%)",
-    "gyro_variance": "Raw motion (gyro / activity; maps to restful efficiency in app)",
+    "gyro_variance": (
+        "Raw motion (gyro / activity; maps to restful efficiency in app)"
+    ),
 }
+
+
+def _query_for_user(user_id=None):
+    q = Reading.query
+    if user_id is not None:
+        q = q.filter(Reading.user_id == user_id)
+    return q
+
+
+def _reading_to_dict(reading: Reading):
+    return {
+        "timestamp": reading.timestamp,
+        "temperature": reading.temperature,
+        "humidity": reading.humidity,
+        "air_quality": reading.air_quality,
+        "ambient_noise": reading.ambient_noise,
+        "ambient_light": reading.ambient_light,
+        "heart_rate": reading.heart_rate,
+        "spo2": reading.spo2,
+        "gyro_variance": reading.gyro_variance,
+        "hrv_rmssd": reading.hrv_rmssd,
+    }
+
+
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def create(
@@ -68,25 +98,14 @@ def create(
 
 def read_latest(user_id=None):
     try:
-        q = Reading.query
-        if user_id is not None:
-            q = q.filter(Reading.user_id == user_id)
-        reading = q.order_by(Reading.timestamp.desc(), Reading.id.desc()).first()
+        q = _query_for_user(user_id)
+        reading = q.order_by(
+            Reading.timestamp.desc(),
+            Reading.id.desc(),
+        ).first()
         if reading is None:
             return None
-
-        return {
-            "timestamp": reading.timestamp,
-            "temperature": reading.temperature,
-            "humidity": reading.humidity,
-            "air_quality": reading.air_quality,
-            "ambient_noise": reading.ambient_noise,
-            "ambient_light": reading.ambient_light,
-            "heart_rate": reading.heart_rate,
-            "spo2": reading.spo2,
-            "gyro_variance": reading.gyro_variance,
-            "hrv_rmssd": reading.hrv_rmssd,
-        }
+        return _reading_to_dict(reading)
     except Exception as e:
         print("Error:", e)
         return None
@@ -94,9 +113,7 @@ def read_latest(user_id=None):
 
 def read_all(num_samples=50, user_id=None) -> List[Reading]:
     try:
-        q = Reading.query
-        if user_id is not None:
-            q = q.filter(Reading.user_id == user_id)
+        q = _query_for_user(user_id)
         readings = (
             q.order_by(Reading.timestamp.desc(), Reading.id.desc())
             .limit(num_samples)
@@ -130,21 +147,13 @@ def read_event_log(
     row_cap: int = 1200,
     user_id: Optional[int] = None,
 ) -> Optional[List[Reading]]:
-    """
-    Return readings ordered by ascending time within optional bounds.
-
-    If ``metric``, ``threshold_raw``, and ``direction`` ('above' / 'below') are
-    all valid, keep only rows whose decrypted numeric for that metric
-    compares past the threshold.
-    """
+    # Read event-log rows in time order, optional threshold filter.
     try:
         cap = max(1, min(int(row_cap), 5000))
     except (TypeError, ValueError):
         cap = 1200
 
-    query = Reading.query
-    if user_id is not None:
-        query = query.filter(Reading.user_id == user_id)
+    query = _query_for_user(user_id)
 
     end_filter = False
     if start_date:
@@ -197,22 +206,9 @@ def read_sleep_session_between(
     session_end_utc: datetime,
     user_id: Optional[int] = None,
 ) -> List[Reading]:
-    """
-    All readings with ``session_start_utc <= timestamp <= session_end_utc`` (UTC).
-
-    Used for single-night charts and sleep readiness so bounds come only from the
-    sleep onset state machine (ASLEEP → AWAKE), not fixed clock windows.
-    """
-    start = session_start_utc
-    end = session_end_utc
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    else:
-        start = start.astimezone(timezone.utc)
-    if end.tzinfo is None:
-        end = end.replace(tzinfo=timezone.utc)
-    else:
-        end = end.astimezone(timezone.utc)
+    # Read rows in one session window (UTC start/end).
+    start = _as_utc(session_start_utc)
+    end = _as_utc(session_end_utc)
 
     q = Reading.query.filter(
         and_(
@@ -235,10 +231,7 @@ def read_search(
     threshold_temperature: Optional[object] = None,
     user_id: Optional[int] = None,
 ) -> Optional[List[Reading]]:
-    """
-    Compatibility wrapper: prefers ``metric`` / ``threshold``; falls back to
-    legacy ``threshold_temperature`` (temperature °C column).
-    """
+    # Backward-compatible wrapper around read_event_log.
     effective_metric = metric
     effective_thresh = threshold
     effective_dir = direction

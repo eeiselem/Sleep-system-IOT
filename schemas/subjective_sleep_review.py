@@ -1,5 +1,3 @@
-"""ORM model for subjective sleep reviews (table ``morning_sleep_feedback``)."""
-
 from sqlalchemy import UniqueConstraint
 
 from db import db
@@ -7,16 +5,6 @@ from utils import get_current_utc_time
 
 
 class SubjectiveSleepReview(db.Model):
-    """
-    Daily 1–5 star rating and optional text for a specific sleep session.
-
-    ``feedback_for_date`` is the wake morning (UTC calendar day) that ends the
-    reviewed night (aligned with sleep readiness / optimal-band keys).
-
-    ``linked_sleep_session_id`` / ``algorithm_readiness_snapshot`` tie this row
-    to ground truth vs the algorithmic sleep score at submit time.
-    """
-
     __tablename__ = "morning_sleep_feedback"
     __table_args__ = (
         UniqueConstraint(
@@ -42,5 +30,5 @@ class SubjectiveSleepReview(db.Model):
     )
 
 
-# Backward-compatible alias (same table / mapper).
+# alias kept for old imports
 MorningSleepFeedback = SubjectiveSleepReview

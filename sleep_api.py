@@ -1,4 +1,3 @@
-"""Sleep charts, subjective review serialization, and Sleep Coach context (used by API routes)."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -11,6 +10,11 @@ from config import (
 from crud import reading as reading_crud
 from db import db
 from logic import _latest_sleep_session_ended_on, get_sleep_session_resolution_context
+from services.readings_service import (
+    compact_payload_point,
+    downsample_rows,
+    fetch_recent_user_rows,
+)
 from schemas.reading import Reading
 from schemas.sleep_score_discrepancy_log import SleepScoreDiscrepancyLog
 from schemas.sleep_session import SleepSession
@@ -20,17 +24,10 @@ from timefmt import to_utc_datetime, utc_isoformat_z
 from utils import (
     format_restlessness_band_from_score,
     get_current_utc_time,
+    mean_or_none,
     restlessness_score_from_raw,
+    to_float_or_none,
 )
-
-
-def to_float_or_none(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def readings_context_anonymized_for_llm(
@@ -40,18 +37,15 @@ def readings_context_anonymized_for_llm(
     llm_budget_rows: int = 1700,
     user_id: int,
 ) -> Dict[str, Any]:
-    """Rolling-window readings for Sleep Coach prompts — no PII columns."""
+    # Build a recent anonymized bundle for Sleep Coach.
     since = get_current_utc_time() - timedelta(days=days)
-    q = (
-        Reading.query.filter(Reading.timestamp >= since)
-        .filter(Reading.user_id == user_id)
-        .order_by(Reading.timestamp.asc())
-        .limit(limit)
+    rows = fetch_recent_user_rows(
+        user_id,
+        since=since,
+        limit=limit,
+        ascending=True,
     )
-    rows = q.all()
-    if len(rows) > llm_budget_rows:
-        stride = max(1, len(rows) // llm_budget_rows)
-        rows = rows[::stride][:llm_budget_rows]
+    rows = downsample_rows(rows, llm_budget_rows)
     readings = []
     for r in rows:
         point = {
@@ -65,15 +59,8 @@ def readings_context_anonymized_for_llm(
             "spo2_pct": to_float_or_none(r.spo2),
             "gyro_variance": to_float_or_none(r.gyro_variance),
         }
-        # Compact context: remove missing keys and round numeric payload.
-        compact = {}
-        for k, v in point.items():
-            if v is None:
-                continue
-            if isinstance(v, float):
-                compact[k] = round(v, 2)
-            else:
-                compact[k] = v
+        # Keep payload small for model context.
+        compact = compact_payload_point(point, float_precision=2)
         readings.append(compact)
     return {
         "window_days": days,
@@ -87,7 +74,7 @@ def readings_context_anonymized_for_llm(
 
 
 def build_sleep_night_points(readings: List[Reading]) -> List[Dict[str, Any]]:
-    """Chronological points for a sleep window (PRV aligned with readiness logic)."""
+    # Build time-series points for one sleep window.
     points: List[Dict[str, Any]] = []
     prev_rr: Optional[float] = None
     for row in readings:
@@ -130,7 +117,7 @@ def build_sleep_night_points(readings: List[Reading]) -> List[Dict[str, Any]]:
 
 
 def _wake_calendar_date(session_row: SleepSession) -> date:
-    """UTC calendar day for session labelling: wake day when closed, else start day."""
+    # Label by wake day if closed, else start day.
     if session_row.ended_at is not None:
         return to_utc_datetime(session_row.ended_at).date()
     return to_utc_datetime(session_row.started_at).date()
@@ -246,7 +233,7 @@ def resolve_sleep_session_for_night_chart(
 
 
 def subjective_review_target_date(now_utc: datetime) -> date:
-    """Wake-date (UTC) used as default for 'last night' subjective review."""
+    # Default review target date (UTC wake date).
     if now_utc.hour >= 8:
         return now_utc.date()
     return now_utc.date() - timedelta(days=1)
@@ -273,10 +260,6 @@ def serialize_subjective_sleep_review_history_entry(
     else:
         base["readiness_score"] = None
     return base
-
-
-def _mean(nums: List[float]) -> Optional[float]:
-    return round(sum(nums) / len(nums), 3) if nums else None
 
 
 def _session_sensor_nightly_averages(sess: SleepSession) -> Dict[str, Optional[float]]:
@@ -320,13 +303,27 @@ def _session_sensor_nightly_averages(sess: SleepSession) -> Dict[str, Optional[f
             if rs is not None:
                 rest.append(float(rs))
     return {
-        "avg_heart_rate_bpm": _mean(hrs),
-        "avg_spo2_pct": _mean(spo2s),
-        "avg_hrv_rmssd_ms": _mean(hrvs),
-        "avg_ambient_light_lux": _mean(lux),
-        "avg_air_quality_index": _mean(voc),
-        "avg_ambient_noise_db": _mean(noise),
-        "avg_restlessness_score": _mean(rest),
+        "avg_heart_rate_bpm": (
+            round(mean_or_none(hrs), 3) if mean_or_none(hrs) is not None else None
+        ),
+        "avg_spo2_pct": (
+            round(mean_or_none(spo2s), 3) if mean_or_none(spo2s) is not None else None
+        ),
+        "avg_hrv_rmssd_ms": (
+            round(mean_or_none(hrvs), 3) if mean_or_none(hrvs) is not None else None
+        ),
+        "avg_ambient_light_lux": (
+            round(mean_or_none(lux), 3) if mean_or_none(lux) is not None else None
+        ),
+        "avg_air_quality_index": (
+            round(mean_or_none(voc), 3) if mean_or_none(voc) is not None else None
+        ),
+        "avg_ambient_noise_db": (
+            round(mean_or_none(noise), 3) if mean_or_none(noise) is not None else None
+        ),
+        "avg_restlessness_score": (
+            round(mean_or_none(rest), 3) if mean_or_none(rest) is not None else None
+        ),
     }
 
 
@@ -336,7 +333,7 @@ def _bind_subjective_review_to_ground_truth(
     session_date: date,
     rating: int,
 ) -> bool:
-    """Link review to closed session; log large subjective-vs-algorithm gaps."""
+    # Link review to closed session and log big mismatch cases.
     sess = _latest_sleep_session_ended_on(session_date, user_id)
     discrepancy_logged = False
     if sess is None:

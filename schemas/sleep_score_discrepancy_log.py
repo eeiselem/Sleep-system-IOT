@@ -1,16 +1,8 @@
-"""ORM for algorithm-vs-subjective mismatch events (future weight tuning)."""
-
 from db import db
 from utils import get_current_utc_time
 
 
 class SleepScoreDiscrepancyLog(db.Model):
-    """
-    Logged when subjective morning rating is very low while the session's
-    algorithmic sleep score (readiness) is high — for offline analysis of
-    readiness formula weights.
-    """
-
     __tablename__ = "sleep_score_discrepancy_log"
 
     id = db.Column(db.Integer, primary_key=True)

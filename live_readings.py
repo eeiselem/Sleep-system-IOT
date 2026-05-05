@@ -1,6 +1,6 @@
-"""Merged latest-reading snapshot for dashboard SSR and /api/latest-readings."""
 from typing import Any, Dict, List, Optional
 
+from services.readings_service import fetch_recent_user_rows
 from schemas.reading import Reading
 from timefmt import utc_isoformat_z
 from utils import restlessness_score_from_raw
@@ -9,7 +9,11 @@ from utils import restlessness_score_from_raw
 def _row_looks_biometric_only(r: Reading) -> bool:
     if r._air_quality is not None or r._ambient_noise is not None:
         return False
-    if r._heart_rate is None and r._spo2 is None and getattr(r, "_hrv_rmssd", None) is None:
+    if (
+        r._heart_rate is None
+        and r._spo2 is None
+        and getattr(r, "_hrv_rmssd", None) is None
+    ):
         return False
     try:
         t = (r.temperature or "").strip()
@@ -23,7 +27,9 @@ def _row_looks_biometric_only(r: Reading) -> bool:
     return True
 
 
-def _merge_latest_readings_display(rows: List[Reading]) -> Optional[Dict[str, Any]]:
+def _merge_latest_readings_display(
+    rows: List[Reading],
+) -> Optional[Dict[str, Any]]:
     if not rows:
         return None
     out: Dict[str, Any] = {}
@@ -38,7 +44,10 @@ def _merge_latest_readings_display(rows: List[Reading]) -> Optional[Dict[str, An
         if r._gyro_variance is not None and out.get("gyro_variance") is None:
             out["gyro_variance"] = r.gyro_variance
             out["gyro_variance_updated_at"] = ts
-        if getattr(r, "_hrv_rmssd", None) is not None and out.get("hrv_rmssd") is None:
+        if (
+            getattr(r, "_hrv_rmssd", None) is not None
+            and out.get("hrv_rmssd") is None
+        ):
             out["hrv_rmssd"] = r.hrv_rmssd
             out["hrv_rmssd_updated_at"] = ts
     for r in rows:
@@ -96,12 +105,7 @@ def build_latest_live_readings_payload(user_id: int) -> Dict[str, Any]:
         "restlessness_score_updated_at": None,
         "hrv_rmssd_updated_at": None,
     }
-    rows = (
-        Reading.query.filter(Reading.user_id == user_id)
-        .order_by(Reading.timestamp.desc(), Reading.id.desc())
-        .limit(80)
-        .all()
-    )
+    rows = fetch_recent_user_rows(user_id, limit=80, ascending=False)
     merged = _merge_latest_readings_display(rows)
     if not merged:
         return empty

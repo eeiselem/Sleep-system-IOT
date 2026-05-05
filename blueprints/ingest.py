@@ -1,6 +1,7 @@
 import hashlib
 import os
 import secrets
+from functools import wraps
 
 from flask import Blueprint, current_app, request
 from pydantic import ValidationError
@@ -19,31 +20,7 @@ def _digest_ingest_key(value: str) -> bytes:
     return hashlib.sha256((value or "").encode("utf-8")).digest()
 
 
-def persist_reading_base(clean_data: ReadingBase) -> None:
-    """Insert a validated full-sensor row and run post-ingest hooks (``POST /post-data``)."""
-    reading.create(
-        temperature=ingest_field_plaintext(clean_data.temperature),
-        humidity=ingest_field_plaintext(clean_data.humidity),
-        air_quality=ingest_field_plaintext(clean_data.air_quality),
-        ambient_noise=ingest_field_plaintext(clean_data.ambient_noise),
-        ambient_light=ingest_field_plaintext(clean_data.ambient_light),
-        heart_rate=ingest_field_plaintext(clean_data.heart_rate),
-        spo2=ingest_field_plaintext(clean_data.spo2),
-        gyro_variance=ingest_field_plaintext(clean_data.gyro_variance),
-        user_id=default_ingest_user_id(),
-    )
-
-    try:
-        evaluate_sleep_state(current_app)
-    except Exception:
-        current_app.logger.exception("evaluate_sleep_state failed after ingest")
-
-    if room_sim.total_records_cache is not None:
-        room_sim.total_records_cache += 1
-
-
-@bp.route("/post-data", methods=["POST"])
-def receive_data():
+def _require_ingest_api_key():
     expected_key = (os.getenv("INGEST_API_KEY") or "").strip()
     if not expected_key:
         return {
@@ -56,10 +33,62 @@ def receive_data():
         _digest_ingest_key(expected_key),
     ):
         return {"error": "Unauthorized"}, 401
+    return None
 
+
+def require_api_key(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        rejected = _require_ingest_api_key()
+        if rejected is not None:
+            return rejected
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def _json_object_body():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        return {"error": "JSON object body required"}, 400
+        return None, ({"error": "JSON object body required"}, 400)
+    return payload, None
+
+
+def _cache_bump():
+    if room_sim.total_records_cache is not None:
+        room_sim.total_records_cache += 1
+
+
+def _run_post_ingest_state_update(log_context: str) -> None:
+    try:
+        evaluate_sleep_state(current_app)
+    except Exception:
+        current_app.logger.exception(log_context)
+
+
+def persist_reading_base(clean_data: ReadingBase) -> None:
+    # Save full reading row, then update sleep state.
+    reading.create(
+        temperature=ingest_field_plaintext(clean_data.temperature),
+        humidity=ingest_field_plaintext(clean_data.humidity),
+        air_quality=ingest_field_plaintext(clean_data.air_quality),
+        ambient_noise=ingest_field_plaintext(clean_data.ambient_noise),
+        ambient_light=ingest_field_plaintext(clean_data.ambient_light),
+        heart_rate=ingest_field_plaintext(clean_data.heart_rate),
+        spo2=ingest_field_plaintext(clean_data.spo2),
+        gyro_variance=ingest_field_plaintext(clean_data.gyro_variance),
+        user_id=default_ingest_user_id(),
+    )
+    _run_post_ingest_state_update("evaluate_sleep_state failed after ingest")
+    _cache_bump()
+
+
+@bp.route("/post-data", methods=["POST"])
+@require_api_key
+def receive_data():
+    payload, err = _json_object_body()
+    if err is not None:
+        return err
 
     try:
         clean_data = ReadingBase(**payload)
@@ -72,23 +101,11 @@ def receive_data():
 
 
 @bp.route("/post-environment", methods=["POST"])
+@require_api_key
 def receive_environment():
-    expected_key = (os.getenv("INGEST_API_KEY") or "").strip()
-    if not expected_key:
-        return {
-            "error": "Server misconfiguration: INGEST_API_KEY is not set",
-        }, 503
-
-    supplied = (request.headers.get("X-API-KEY") or "").strip()
-    if not secrets.compare_digest(
-        _digest_ingest_key(supplied),
-        _digest_ingest_key(expected_key),
-    ):
-        return {"error": "Unauthorized"}, 401
-
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return {"error": "JSON object body required"}, 400
+    payload, err = _json_object_body()
+    if err is not None:
+        return err
 
     try:
         clean_data = EnvironmentReadingIn(**payload)
@@ -104,15 +121,10 @@ def receive_environment():
             hrv_rmssd=None,
             user_id=default_ingest_user_id(),
         )
-        try:
-            evaluate_sleep_state(current_app)
-        except Exception:
-            current_app.logger.exception(
-                "evaluate_sleep_state failed after environment ingest"
-            )
-
-        if room_sim.total_records_cache is not None:
-            room_sim.total_records_cache += 1
+        _run_post_ingest_state_update(
+            "evaluate_sleep_state failed after environment ingest"
+        )
+        _cache_bump()
 
         return {"status": "success"}, 200
     except ValidationError as e:
@@ -122,20 +134,8 @@ def receive_environment():
 
 
 @bp.route("/biometric", methods=["POST"])
+@require_api_key
 def receive_biometric():
-    expected_key = (os.getenv("INGEST_API_KEY") or "").strip()
-    if not expected_key:
-        return {
-            "error": "Server misconfiguration: INGEST_API_KEY is not set",
-        }, 503
-
-    supplied = (request.headers.get("X-API-KEY") or "").strip()
-    if not secrets.compare_digest(
-        _digest_ingest_key(supplied),
-        _digest_ingest_key(expected_key),
-    ):
-        return {"error": "Unauthorized"}, 401
-
     body = (request.get_data(as_text=True) or "").strip()
     obj, dec_err = decrypt_biometric_aes128_cbc_b64(body)
     if dec_err:
@@ -161,13 +161,10 @@ def receive_biometric():
             ),
             user_id=default_ingest_user_id(),
         )
-        try:
-            evaluate_sleep_state(current_app)
-        except Exception:
-            current_app.logger.exception("evaluate_sleep_state failed after biometric ingest")
-
-        if room_sim.total_records_cache is not None:
-            room_sim.total_records_cache += 1
+        _run_post_ingest_state_update(
+            "evaluate_sleep_state failed after biometric ingest"
+        )
+        _cache_bump()
 
         return {"status": "success"}, 200
     except Exception as e:

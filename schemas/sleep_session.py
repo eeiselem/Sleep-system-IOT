@@ -2,12 +2,6 @@ from db import db
 
 
 class SleepSession(db.Model):
-    """
-    One closed or in-progress sleep interval: ASLEEP onset → AWAKE (gyro breakout).
-
-    Readiness metrics are filled when ``ended_at`` is set (session complete).
-    """
-
     __tablename__ = "sleep_sessions"
 
     id = db.Column(db.Integer, primary_key=True)

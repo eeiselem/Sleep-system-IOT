@@ -1,4 +1,3 @@
-"""Simulated room state, sunrise helper, background workers."""
 import threading
 import time
 from datetime import timedelta
@@ -22,7 +21,7 @@ from schemas.sleep_session import SleepSession
 from schemas.user import User
 from sleep_metrics import compute_sleep_readiness_for_session
 from timefmt import utc_isoformat_z
-from utils import get_current_utc_time
+from utils import get_current_utc_time, to_float_or_none
 
 _flask_app = None
 
@@ -42,8 +41,7 @@ simulated_room_state = {
     "sleep_onset_confirmed": False,
     "sleep_signal_score": 0,
     "last_drift_detected": [],
-    # Presentation toggles only (writable via POST /api/dev/simulation). When set, badges show
-    # intervention activity without relying on sensor baselines reaching drift thresholds.
+    # Demo flags from /api/dev/simulation.
     "dev_simulation": {
         "force_high_temperature": False,
         "force_high_noise": False,
@@ -57,14 +55,14 @@ simulated_room_state = {
         "fan": False,
         "air_filtration_high_fan": False,
     },
-    # Proposal defaults: circadian nighttime ambient target 0–10 lm expressed as nominal + limits.
+    # Default ambient light setup.
     "lighting": {
         "state": "ambient",
         "brightness_percent": 8,
         "lumens_nominal": 5,
         "lumens_range_lm": {"min": 0, "max": 10},
     },
-    # Thermal default midpoint of 15–19 °C documented band (°C).
+    # Default temp target.
     "hvac": {"mode": "idle", "target_temperature_c": 17.0},
     "ventilation": {"mode": "normal", "fan_percent": 20},
     "environment": {
@@ -73,7 +71,7 @@ simulated_room_state = {
         "ambient_noise_db": None,
         "voc_index": None,
     },
-    # Strict scientific defaults — midpoints of allowed bands at control-loop init (°C / %RH / lux).
+    # Baseline defaults used by control loop.
     "baselines": {
         "temperature_c": (config.SCI_TEMP_BAND_C_MIN + config.SCI_TEMP_BAND_C_MAX) / 2.0,
         "temperature_band_c": {"min": config.SCI_TEMP_BAND_C_MIN, "max": config.SCI_TEMP_BAND_C_MAX},
@@ -94,17 +92,8 @@ optimal_band_thread_started = False
 _last_optimal_band_utc_date = None
 
 
-def to_float_or_none(value):
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def session_mean_heart_rate_bpm(open_session_pk):
-    """Mean HR across the active sleep-session window (excluding invalid samples)."""
+    # Mean HR over the active sleep session window.
     if open_session_pk is None:
         return None
     sess = db.session.get(SleepSession, open_session_pk)
@@ -123,6 +112,8 @@ def session_mean_heart_rate_bpm(open_session_pk):
     if not vals:
         return None
     return sum(vals) / len(vals)
+
+
 def compute_sunrise_sequence(now_utc, wake_time_str):
     sunrise_window_minutes = 30
     if not wake_time_str:
@@ -167,7 +158,7 @@ def compute_sunrise_sequence(now_utc, wake_time_str):
         "phase": phase,
         "wake_time": f"{wake_hour:02d}:{wake_minute:02d}",
         "minutes_to_wake": round(minutes_to_wake, 1),
-        # UTC instant for client: (next_wake_unix_ms - Date.now()) / 60000 — no local TZ math
+        # keep this in UTC for frontend math
         "next_wake_unix_ms": int(next_wake.timestamp() * 1000),
         "progress_percent": round(progress * 100, 1),
         "lumen": lumen,
@@ -199,19 +190,7 @@ def compute_simulated_hardware(
     noise_spike=False,
     noise_constant_high=False,
 ):
-    """
-    Map sensors (+ dev toggles + biological hints) to actuator badges.
-
-    Rules (strict):
-    * **Cooling** — only when room temp is *above* the persisted optimal °C band (or dev
-      ``force_high_temperature``). Biological Rule A adds cooling only in that same case.
-    * **Heater** — only when temp is *below* the optimal band (or ``force_low_temperature``).
-    * **White noise** — while asleep: loud **spikes** vs baseline/prior sample, **or** a
-      sustained elevated level, **or** an absolute high dB floor.
-    * **Air filtration** — VOC / air-quality hazard. Fan is **not** set separately when
-      filtration is on (filtration implies a fan).
-    * **Fan** — otherwise, circulation/masking support for cooling or white noise only.
-    """
+    # Convert current signals + dev flags to actuator states.
     out = {
         "cooling": False,
         "heater": False,
@@ -257,7 +236,7 @@ def compute_simulated_hardware(
 
 
 def refresh_simulated_hardware_locked():
-    """Recompute simulated_hardware; must already hold ``sim_room_lock``."""
+    # Recompute simulated_hardware (caller must hold sim_room_lock).
     dev = simulated_room_state.get("dev_simulation") or {}
     interventions_ok = bool(simulated_room_state.get("sleep_mode_active"))
     hints = simulated_room_state.get("_autonomy_hints") or {}
@@ -275,10 +254,7 @@ def refresh_simulated_hardware_locked():
 
 
 def calculate_sleep_readiness_worker():
-    """
-    Backfills readiness on closed sessions missing metrics (repair path).
-    Normal path: finalize when the biometric stream goes idle (see ``evaluate_sleep_state``).
-    """
+    # Repair worker: backfill readiness for ended sessions.
     while True:
         with _flask_app.app_context():
             pending = SleepSession.query.filter(
@@ -291,7 +267,7 @@ def calculate_sleep_readiness_worker():
 
 
 def update_optimal_band_worker():
-    """Once per UTC day shortly after sleep window ends (~08:35+)."""
+    # Daily optimal-band update (runs once after 08:35 UTC).
     global _last_optimal_band_utc_date
     while True:
         time.sleep(60)
@@ -331,7 +307,7 @@ def evaluate_sleep_and_environment():
             voc = to_float_or_none(latest.air_quality)
             hr = to_float_or_none(latest.heart_rate)
 
-            # Prefer first account's persisted optimal °F band as sleep HVAC target (°C).
+            # Use first user's saved optimal band as HVAC target.
             ref_user = User.query.order_by(User.id.asc()).first()
             if ref_user is not None:
                 _lo = float(ref_user.cfg_optimal_band_f_min or 65.0)
@@ -458,7 +434,7 @@ def evaluate_sleep_and_environment():
                 if noise_constant_high:
                     drift_detected.append("noise_sustained_high")
 
-                # VOC / MQ‑135: autonomous hazard corridor — evaluated outside ASLEEP gating.
+                # VOC hazard logic (runs regardless of ASLEEP state).
                 voc_abs_alarm = (
                     voc is not None and float(voc) > config.MQ135_SAFE_INDEX_MAX
                 )
@@ -474,7 +450,7 @@ def evaluate_sleep_and_environment():
                 session_hr_mean = session_mean_heart_rate_bpm(
                     session_pk if asleep else None,
                 )
-                # Rule A: elevated HR vs session average while room is above optimal band.
+                # If HR is high and room is too warm, cool harder.
                 corr_rule_a_high_hr_hot = (
                     asleep
                     and hr is not None
@@ -608,7 +584,7 @@ def evaluate_sleep_and_environment():
                         "fan_percent": 25,
                     }
 
-                # VOC response is independent of sleep state; always wins over drift defaults.
+                # VOC response always takes priority.
                 if voc_alarm_active:
                     simulated_room_state["ventilation"] = {
                         "mode": "boost",

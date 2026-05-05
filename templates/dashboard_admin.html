@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Sleep · Admin{% endblock %}
+
+{% block head_extra %}
+{% include "includes/dash_assets.html" %}
+{% endblock %}
+
+{% block body_attr %}class="app-shell app-dashboard dash-body"{% endblock %}
+
+{% block content %}
+<div class="dash-page">
+    <p class="text-lg font-semibold tracking-tight text-zinc-100 sm:text-xl">
+        Administrator · {{ user.username }}
+    </p>
+    <p class="mt-1 max-w-2xl text-[0.82rem] text-zinc-500">Database connection summary and registered accounts.</p>
+
+    <div class="dash-card dash-card--trans mt-5">
+        <h2 class="dash-h2">Database</h2>
+        <dl class="mt-4 space-y-3 text-[0.88rem] text-zinc-300">
+            <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-500">SQLAlchemy URI</dt>
+                <dd class="min-w-0 break-all font-mono text-teal-200/90">{{ db_uri }}</dd>
+            </div>
+            <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Instance folder</dt>
+                <dd class="min-w-0 break-all font-mono text-zinc-400">{{ instance_path }}</dd>
+            </div>
+            <div class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt class="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Approx. row counts</dt>
+                <dd class="text-zinc-300">
+                    users: <strong class="tabular-nums text-zinc-100">{{ counts.users }}</strong>
+                    · readings: <strong class="tabular-nums text-zinc-100">{{ counts.readings }}</strong>
+                    · sleep_sessions: <strong class="tabular-nums text-zinc-100">{{ counts.sleep_sessions }}</strong>
+                </dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="dash-card dash-card--wide dash-card--trans mt-5">
+        <h2 class="dash-h2">Users</h2>
+        <div class="mt-4 overflow-x-auto rounded-xl border border-white/10">
+            <table class="w-full min-w-[28rem] border-collapse text-left text-sm">
+                <thead>
+                    <tr class="border-b border-white/10 bg-black/35">
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">ID</th>
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Username</th>
+                        <th class="px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Role</th>
+                    </tr>
+                </thead>
+                <tbody class="text-zinc-300">
+                    {% for u in users %}
+                    <tr class="border-b border-white/[0.04] hover:bg-white/[0.03]">
+                        <td class="px-3 py-2.5 tabular-nums text-zinc-500">{{ u.id }}</td>
+                        <td class="px-3 py-2.5 font-medium text-zinc-200">{{ u.username }}</td>
+                        <td class="px-3 py-2.5">{{ u.role }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.__DASH_BOOT__ = { page: 'admin', live: {} };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

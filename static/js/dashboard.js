@@ -3,7 +3,7 @@
         const trimmed = String(timestampStr).trim();
         if (!trimmed) return null;
 
-        // If server provides naive timestamp, treat it as UTC.
+        // If timestamp has no zone, treat as UTC.
         if (
             !trimmed.endsWith('Z') &&
             !/[+-]\d{2}:\d{2}$/.test(trimmed)
@@ -13,7 +13,7 @@
         return new Date(trimmed);
     }
 
-    /** IANA zone for single-night charts (browser local, so labels match the viewer’s clock). */
+    // Browser timezone used for chart labels.
     const SLEEP_CHART_TZ =
         typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function'
             ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
@@ -50,7 +50,7 @@
         }).format(d);
     }
 
-    /** Keep in sync with ``utils.format_restlessness_band_from_score`` (0 to 100 restful efficiency). */
+    // Keep this in sync with utils.format_restlessness_band_from_score.
     function formatRestlessnessJs(score) {
         if (!Number.isFinite(score)) return '-';
         if (score >= 80) return 'Excellent (still / restful)';
@@ -58,32 +58,38 @@
         return 'Low rest efficiency (restless)';
     }
 
-    // Setup live clock
-    setInterval(() => {
-        document.getElementById('live-clock').innerText = new Date().toLocaleTimeString();
-    }, 1000);
+    (function initLiveClockMaybe() {
+        const el = document.getElementById('live-clock');
+        if (!el) return;
+        const tick = () => {
+            el.innerText = new Date().toLocaleTimeString();
+        };
+        tick();
+        setInterval(tick, 1000);
+    })();
 
-    /* Generated from templates/dashboard.html - boot from inline snippet in template. */
-const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
+    // Boot data from template.
+const DASH_BOOT = typeof window.__DASH_BOOT__ === 'object' && window.__DASH_BOOT__ !== null ? window.__DASH_BOOT__ : {};
+const LIVE_READINGS_INITIAL =
+    DASH_BOOT.live && typeof DASH_BOOT.live === 'object' ? DASH_BOOT.live : {};
+const DASH_PAGE = typeof DASH_BOOT.page === 'string' ? DASH_BOOT.page : '';
     let liveReadingsCache = LIVE_READINGS_INITIAL;
 
-    /** Sleep-session charts (single night); weekly view uses one multi-series line chart; sleep score history is its own line chart. */
+    // Chart instances.
     let sleepScoreHistoryChart = null;
     let sleepWeeklyMultiChart = null;
     let sleepNightCharts = [];
 
-    /** Latest `/api/simulated-room` sunrise block; drives wake-time fallback when the time input is empty. */
+    // Last sunrise payload from API.
     let lastSunriseSequence = null;
 
-    /** Last wake time persisted from the server (``cfg-wake-time`` is draft until Save). */
+    // Last saved wake time.
     let savedCfgWakeTime = '';
 
     let sunriseDemoActive = false;
     let sunriseDemoRafId = null;
 
-    /**
-     * Minutes until the next occurrence of HH:MM (24h clock) today in local time, else tomorrow if past.
-     */
+    // Minutes until next HH:MM.
     function computeMinutesToWakeFromWakeClockHm(wakeHM) {
         if (!wakeHM || typeof wakeHM !== 'string') return null;
         const trimmed = wakeHM.trim();
@@ -101,7 +107,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return deltaMs / 60000;
     }
 
-    /** Same wake-clock source as Minutes-to-Wake display (config input → API wake_time). */
+    // Minutes-to-wake source: config input or API wake_time.
     function getUnifiedMinutesToWake() {
         const wakeEl = document.getElementById('cfg-wake-time');
         let wakeHM = wakeEl && wakeEl.value ? String(wakeEl.value).trim() : '';
@@ -119,10 +125,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         if (minEl) minEl.innerText = mins !== null ? mins.toFixed(1) : '-';
     }
 
-    /**
-     * Real-time smart-bulb prelude for the next 30 local minutes before wake:
-     * background #000 → daylight via lumen/Kelvin map; lumens forced to 0 when >30 min out.
-     */
+    // Show sunrise prelude in the last 30 minutes before wake.
     function applyLocalSunrisePreludeFromMinutes(mins) {
         if (!Number.isFinite(mins)) return;
 
@@ -210,7 +213,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return !ts && !anyVal;
     }
 
-    /** Display values from `/api/latest-readings` (matches Reading model fields). */
+    // Format a live reading for tile display.
     function formatLiveReadingMetric(val, unitSuffix) {
         if (val === null || val === undefined || val === 'N/A') return '-';
         const s = String(val).trim();
@@ -235,15 +238,11 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return Number.isInteger(n) ? String(Math.round(n)) : String(Number(n.toFixed(2)));
     }
 
-    /**
-     * Air-quality score normalization for dashboard UX:
-     * - scale is 1-100 where 100 is best (cleaner air)
-     * - raw device index may exceed 100; normalize into this score range.
-     */
+    // Normalize raw air reading into 1..100 (100 is best).
     function normalizeAirQualityScore(val) {
         const n = Number(val);
         if (!Number.isFinite(n)) return null;
-        // Treat lower raw index as cleaner; invert to score where higher is better.
+        // Lower raw value means cleaner air; invert so higher score is better.
         const clamped = Math.max(0, Math.min(500, n));
         return Math.max(1, Math.min(100, Math.round(100 - ((clamped / 500) * 99))));
     }
@@ -268,7 +267,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return score === null ? '-' : String(score);
     }
 
-    /** Live API temperature is stored as °C; dashboard shows °F. */
+    // Live API temp is C; UI shows F.
     function formatLiveTemperatureFahrenheit(val) {
         if (val === null || val === undefined || val === 'N/A') return '-';
         const s = String(val).trim();
@@ -298,7 +297,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         red: 'temp-val dash-temp-tier-red',
     };
 
-    /** Numeric live reading for tiering (null if missing, error, or non-numeric). */
+    // Parse numeric value for color tiering.
     function parseLiveReadingNumber(val) {
         if (!liveMetricHasReadableValue(val)) return null;
         const s = String(val).trim();
@@ -327,7 +326,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return 'red';
     }
 
-    /** Broad asleep/rest baseline guardrails for visual management (not medical diagnosis). */
+    // Simple visual guardrails, not medical.
     function tierHeartRateBpm(n) {
         if (n >= 45 && n <= 65) return 'ok';
         if ((n >= 35 && n < 45) || (n > 65 && n <= 80)) return 'amber';
@@ -346,21 +345,21 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return 'red';
     }
 
-    /** Air-quality score bands on 1-100 scale (higher is better). */
+    // Air score color bands (higher is better).
     function tierAirQualityIndex(n) {
         if (n >= 75) return 'ok';
         if (n >= 50) return 'amber';
         return 'red';
     }
 
-    /** Higher restful score is better (stillness). */
+    // Higher restful score is better.
     function tierRestfulScore(n) {
         if (n >= 85) return 'ok';
         if (n >= 70) return 'amber';
         return 'red';
     }
 
-    /** Lower lux is better for sleep. */
+    // Lower lux is better for sleep.
     function tierLuxSleep(n) {
         if (n < 2) return 'ok';
         if (n <= 40) return 'amber';
@@ -749,7 +748,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
             statusEl.innerText = '';
         }
 
-        /* --- Synchronized per-metric charts --- */
+        // Per-metric synchronized charts
         var detailSpecs = [
             {
                 wrapId: 'sleep-wrap-room_temp_f',
@@ -1065,7 +1064,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
             return `${n.toFixed(decimals)}${suffix}`;
         }
 
-        /** Same keys as Single Night timelines / server ``_session_sensor_nightly_averages`` (+ sleep score). */
+        // Keys from nightly averages API (+ sleep score).
         const weeklyLineSpecs = [
             { key: 'readiness_score', label: 'Sleep score', decimals: 1, suffix: '' },
             { key: 'avg_heart_rate_bpm', label: 'Heart rate', decimals: 1, suffix: ' bpm' },
@@ -1359,10 +1358,13 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
     }
 
     function updateSleepHistoryModeUI() {
-        const mode = document.getElementById('sleep-history-mode').value;
+        const modeEl = document.getElementById('sleep-history-mode');
+        if (!modeEl) return;
+        const mode = modeEl.value;
         const nightLbl = document.getElementById('sleep-session-select-label');
         const single = document.getElementById('sleep-single-night-wrap');
         const weekly = document.getElementById('sleep-weekly-wrap');
+        if (!single || !weekly) return;
         const nightMode = mode === 'single-night';
         if (nightLbl) {
             nightLbl.classList.toggle('hidden', !nightMode);
@@ -1378,47 +1380,55 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         }
     }
 
-    document.getElementById('sleep-history-mode').addEventListener('change', updateSleepHistoryModeUI);
-    document.getElementById('sleep-session-select').addEventListener('change', () => {
-        if (document.getElementById('sleep-history-mode').value === 'single-night') {
-            loadSingleNightCharts();
-        }
-    });
-    document.getElementById('sleep-night-reset-zoom').addEventListener('click', () => {
-        sleepNightCharts.forEach((c) => {
-            try {
-                if (typeof c.resetZoom === 'function') {
-                    c.resetZoom();
-                }
-            } catch (e) {
-                console.warn('resetZoom skipped', e);
+    function initSleepSessionDataControls() {
+        const modeEl = document.getElementById('sleep-history-mode');
+        const selEl = document.getElementById('sleep-session-select');
+        const resetBtn = document.getElementById('sleep-night-reset-zoom');
+        if (!modeEl || !selEl || !resetBtn) return;
+        modeEl.addEventListener('change', updateSleepHistoryModeUI);
+        selEl.addEventListener('change', () => {
+            if (document.getElementById('sleep-history-mode').value === 'single-night') {
+                loadSingleNightCharts();
             }
         });
-    });
+        resetBtn.addEventListener('click', () => {
+            sleepNightCharts.forEach((c) => {
+                try {
+                    if (typeof c.resetZoom === 'function') {
+                        c.resetZoom();
+                    }
+                } catch (e) {
+                    console.warn('resetZoom skipped', e);
+                }
+            });
+        });
+        updateSleepHistoryModeUI();
+    }
 
-    updateSleepHistoryModeUI();
+    function startLiveReadingsPolling() {
+        setInterval(() => {
+            fetch('/api/latest-readings')
+                .then((response) => {
+                    if (!response.ok) throw new Error(response.statusText);
+                    return response.json();
+                })
+                .then(applyLiveReadingsPayload)
+                .catch((error) => console.error('Error fetching data:', error));
+        }, 5000);
 
-    setInterval(() => {
-        fetch('/api/latest-readings')
-            .then((response) => {
-                if (!response.ok) throw new Error(response.statusText);
-                return response.json();
-            })
-            .then(applyLiveReadingsPayload)
-            .catch((error) => console.error('Error fetching data:', error));
-    }, 5000);
+        setInterval(() => {
+            if (liveReadingsCache) applyLiveReadingsPayload(liveReadingsCache);
+        }, 20000);
+    }
 
-    setInterval(() => {
-        if (liveReadingsCache) applyLiveReadingsPayload(liveReadingsCache);
-    }, 20000);
-
-    // Convert event-log table instants from stored form to the viewer's local time
-    document.querySelectorAll('.utc-table-time').forEach(el => {
-        const exactTime = parseUtcTimestamp(el.innerText);
-        if (exactTime && !Number.isNaN(exactTime.getTime())) {
-            el.innerText = exactTime.toLocaleString();
-        }
-    });
+    function initUtcTableTimes() {
+        document.querySelectorAll('.utc-table-time').forEach((el) => {
+            const exactTime = parseUtcTimestamp(el.innerText);
+            if (exactTime && !Number.isNaN(exactTime.getTime())) {
+                el.innerText = exactTime.toLocaleString();
+            }
+        });
+    }
 
     // Configuration Panel - comfort range slider (°F guardrails + optimal band)
     const tempComfortDefaults = Object.freeze({
@@ -1439,8 +1449,11 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
     let comfortDragOrigin = null;
 
     function syncComfortInputsToState() {
-        const gMi = parseFloat(document.getElementById('cfg-guardrail-f-min').value);
-        const gMa = parseFloat(document.getElementById('cfg-guardrail-f-max').value);
+        const gminEl = document.getElementById('cfg-guardrail-f-min');
+        const gmaxEl = document.getElementById('cfg-guardrail-f-max');
+        if (!gminEl || !gmaxEl) return;
+        const gMi = parseFloat(gminEl.value);
+        const gMa = parseFloat(gmaxEl.value);
         if (Number.isFinite(gMi)) tempComfort.guardMin = gMi;
         if (Number.isFinite(gMa)) tempComfort.guardMax = gMa;
     }
@@ -1509,9 +1522,11 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
             el.className = DASH_TEMP_TIER_CLASS.neutral;
             return;
         }
-        syncComfortInputsToState();
-        clampComfortGuardrails();
-        clampComfortOptimal();
+        if (document.getElementById('cfg-guardrail-f-min') && document.getElementById('cfg-guardrail-f-max')) {
+            syncComfortInputsToState();
+            clampComfortGuardrails();
+            clampComfortOptimal();
+        }
         const f = celsiusToFahrenheitForComfort(c);
         let tier = 'amber';
         if (f >= tempComfort.optMin && f <= tempComfort.optMax) tier = 'ok';
@@ -1525,8 +1540,11 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
     }
 
     function writeComfortInputsFromState() {
-        document.getElementById('cfg-guardrail-f-min').value = String(tempComfort.guardMin);
-        document.getElementById('cfg-guardrail-f-max').value = String(tempComfort.guardMax);
+        const minEl = document.getElementById('cfg-guardrail-f-min');
+        const maxEl = document.getElementById('cfg-guardrail-f-max');
+        if (!minEl || !maxEl) return;
+        minEl.value = String(tempComfort.guardMin);
+        maxEl.value = String(tempComfort.guardMax);
     }
 
     function renderComfortSlider() {
@@ -1569,6 +1587,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         const band = document.getElementById('cfg-temp-range-optimal');
         const track = document.getElementById('cfg-temp-range-track');
         const overrideEl = document.getElementById('cfg-override-optimal');
+        if (!gminEl || !gmaxEl || !band || !track || !overrideEl) return;
 
         const onGuardrailChange = () => {
             syncComfortInputsToState();
@@ -2055,6 +2074,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
     }
 
     function initializeMorningReviewCard() {
+        if (!document.getElementById('morning-review-tab-today-btn')) return;
         document.getElementById('morning-review-tab-today-btn').addEventListener('click', () => {
             setMorningReviewTab('today');
         });
@@ -2103,7 +2123,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         kelvinMax: 'sunrise_kelvin_max',
     };
 
-    /** Kelvin position in range → full-intensity tint (warm … cool). Ignored when lumens are 0. */
+    // Kelvin position to warm/cool tint.
     function sunriseTintRgbFromKelvin(kelvin, kLo, kHi) {
         const spanK = (kHi - kLo) || 1;
         const w = Math.min(Math.max((kelvin - kLo) / spanK, 0), 1);
@@ -2113,7 +2133,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return { r, g, b };
     }
 
-    /** 0…1 scalar from current lumen vs demo range; 0 lm ⇒ 0 (black). */
+    // Brightness scalar from lumen in demo range.
     function sunriseLumenBrightness01(lumen, lumenLo, lumenHi) {
         if (lumen <= 0) return 0;
         if (lumenHi <= lumenLo) return 1;
@@ -2121,7 +2141,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return Math.min(Math.max(t, 0), 1);
     }
 
-    /** Card + accents: brightness tracks lumen output; 0 lm ⇒ #000 regardless of Kelvin. */
+    // Card color follows lumen brightness; 0 lm is black.
     function sunriseRgbFromLumenKelvin(lumen, kelvin) {
         const { lumenLo, lumenHi, kLo, kHi } = getSunriseRanges();
         if (lumen <= 0) {
@@ -2145,7 +2165,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         return Number.isFinite(n) ? n : fallback;
     }
 
-    /** Sorted min/max for mapping progress to displayed lumens and Kelvin */
+    // Sorted min/max for progress mapping.
     function getSunriseRanges() {
         let lumenLo = parseSunriseInput('sunrise-lumen-min', 0);
         let lumenHi = parseSunriseInput('sunrise-lumen-max', 500);
@@ -2208,10 +2228,7 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         },
     };
 
-    /**
-     * Virtual smart-home webhook shape (physical bridge not wired in this codebase).
-     * ``commands`` mirrors hardware-style actuator messages the integration layer would emit.
-     */
+    // Build demo smart-home intent payload.
     function renderSimulationSmartHomeIntent(devSim, options) {
         const code = document.getElementById('outbound-payload-simulation');
         if (!code) return;
@@ -2432,7 +2449,8 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
             const sunrise = payload.sunrise_sequence;
             lastSunriseSequence = sunrise;
 
-            document.getElementById('sunrise-wake-time').innerText = sunrise.wake_time || '--:--';
+            const wakeVis = document.getElementById('sunrise-wake-time');
+            if (wakeVis) wakeVis.innerText = sunrise.wake_time || '--:--';
 
             updateMinutesToWakeDisplay();
 
@@ -2452,10 +2470,12 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
                 : sunrise.phase === 'wake_now'
                     ? 'Wake sequence complete'
                     : 'Waiting for sunrise window';
-            document.getElementById('sunrise-status').innerText = statusText;
+            const st = document.getElementById('sunrise-status');
+            if (st) st.innerText = statusText;
         } catch (err) {
             console.error('Failed to refresh sunrise sequence:', err);
-            document.getElementById('sunrise-status').innerText = 'Unavailable';
+            const st = document.getElementById('sunrise-status');
+            if (st) st.innerText = 'Unavailable';
         }
     }
 
@@ -2749,39 +2769,53 @@ const LIVE_READINGS_INITIAL = window.__DASH_BOOT__.live;
         window.addEventListener('scroll', onScrollOrResize, true);
     })();
 
-    attachComfortSliderHandlers();
-    initializeConfigPanel();
-    applyLiveReadingsPayload(LIVE_READINGS_INITIAL);
-    initializeMorningReviewCard();
-    initializeSunriseCard();
-    (function bindWakeMinutesPreview() {
-        const wt = document.getElementById('cfg-wake-time');
-        if (!wt) return;
-        let idle;
-        const bump = () => {
-            window.clearTimeout(idle);
-            idle = window.setTimeout(() => updateMinutesToWakeDisplay(), 80);
-        };
-        wt.addEventListener('input', bump);
-        wt.addEventListener('change', bump);
-    })();
-    loadReadinessHero();
-    setInterval(loadReadinessHero, 60000);
-    loadSleepScoreHistoryChart();
-    setInterval(loadSleepScoreHistoryChart, 300000);
-    refreshSunriseSequence();
-    setTimeout(() => tickSunriseRealtimePrelude(), 0);
-    refreshSystemInterventionStatus();
-    setInterval(refreshSunriseSequence, 10000);
-    setInterval(tickSunriseRealtimePrelude, 60000);
-    setInterval(refreshSystemInterventionStatus, 5000);
-    (function initDevSimulationScenarios() {
-        document.querySelectorAll('.dev-scenario-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const sc = btn.getAttribute('data-scenario');
-                if (sc) postDevSimulationScenario(sc);
+    (function dashPageInit() {
+        if (DASH_PAGE === 'overview') {
+            applyLiveReadingsPayload(LIVE_READINGS_INITIAL);
+            startLiveReadingsPolling();
+            loadReadinessHero();
+            setInterval(loadReadinessHero, 60000);
+            loadSleepScoreHistoryChart();
+            setInterval(loadSleepScoreHistoryChart, 300000);
+            initializeMorningReviewCard();
+        }
+        if (DASH_PAGE === 'configure') {
+            attachComfortSliderHandlers();
+            initializeConfigPanel();
+            initializeSunriseCard();
+            (function bindWakeMinutesPreview() {
+                const wt = document.getElementById('cfg-wake-time');
+                if (!wt) return;
+                let idle;
+                const bump = () => {
+                    window.clearTimeout(idle);
+                    idle = window.setTimeout(() => updateMinutesToWakeDisplay(), 80);
+                };
+                wt.addEventListener('input', bump);
+                wt.addEventListener('change', bump);
+            })();
+            refreshSunriseSequence();
+            setInterval(refreshSunriseSequence, 10000);
+            setTimeout(() => tickSunriseRealtimePrelude(), 0);
+            setInterval(tickSunriseRealtimePrelude, 60000);
+        }
+        if (DASH_PAGE === 'control') {
+            refreshSystemInterventionStatus();
+            setInterval(refreshSystemInterventionStatus, 5000);
+            document.querySelectorAll('.dev-scenario-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const sc = btn.getAttribute('data-scenario');
+                    if (sc) postDevSimulationScenario(sc);
+                });
             });
-        });
+        }
+        if (DASH_PAGE === 'data') {
+            initSleepSessionDataControls();
+            initUtcTableTimes();
+        }
+        if (DASH_PAGE === 'admin') {
+            initUtcTableTimes();
+        }
     })();
 
     (function initSleepCoachChat() {

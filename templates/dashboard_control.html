@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Sleep · Control center{% endblock %}
+
+{% block head_extra %}
+{% set include_marked = true %}
+{% include "includes/dash_assets.html" %}
+{% endblock %}
+
+{% block body_attr %}class="app-shell app-dashboard dash-body"{% endblock %}
+
+{% block content %}
+<div class="dash-page">
+    <p class="text-lg font-semibold tracking-tight text-zinc-100 sm:text-xl">
+        Welcome, {{ user.username }}
+    </p>
+    <p class="mt-1 max-w-2xl text-[0.82rem] text-zinc-500">Live actuator intent from the room simulator and quick test scenarios.</p>
+
+    <section
+        id="dashboard-intervention-heartbeat"
+        class="dash-card dash-card--wide dash-card--trans mt-5"
+        aria-labelledby="intervention-heartbeat-heading"
+    >
+        <h2 id="intervention-heartbeat-heading" class="dash-h2 dash-h2--flat mb-1">System Control Center</h2>
+        <p class="mb-4 text-[0.78rem] leading-relaxed text-zinc-500">Actuator badges reflect live intent; <strong class="font-medium text-zinc-400">test scenarios</strong> below update them immediately.</p>
+
+        <div id="intervention-cooling-row" class="dash-intervention-row">
+            <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                <span aria-hidden="true">❄️</span>Cooling
+            </span>
+            <span id="intervention-cooling-badge" class="dash-intervention-badge">IDLE</span>
+        </div>
+        <div id="intervention-heater-row" class="dash-intervention-row">
+            <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                <span aria-hidden="true">🔥</span>Heater
+            </span>
+            <span id="intervention-heater-badge" class="dash-intervention-badge">IDLE</span>
+        </div>
+        <div id="intervention-white-noise-row" class="dash-intervention-row">
+            <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                <span aria-hidden="true">🔊</span>White Noise
+            </span>
+            <span id="intervention-white-noise-badge" class="dash-intervention-badge">IDLE</span>
+        </div>
+        <div id="intervention-fan-row" class="dash-intervention-row">
+            <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                <span id="intervention-fan-icon" aria-hidden="true">🌀</span>
+                Fan
+            </span>
+            <span id="intervention-fan-badge" class="dash-intervention-badge">IDLE</span>
+        </div>
+        <div id="intervention-air-filtration-row" class="dash-intervention-row">
+            <span class="flex items-center gap-2 text-sm font-medium text-zinc-300">
+                <span aria-hidden="true">🌬️</span>
+                Air Filtration / High Fan
+            </span>
+            <span id="intervention-air-filtration-badge" class="dash-intervention-badge">IDLE</span>
+        </div>
+        <p id="intervention-status-footnote" class="mt-1 text-[0.82rem] text-zinc-500"></p>
+
+        {% if current_user.is_authenticated %}
+        <div id="dev-simulation-panel" class="mt-5 border-t border-white/10 pt-5">
+            <h3 class="mb-2.5 text-left text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                Test scenarios
+            </h3>
+            <p class="mb-3 text-[0.82rem] leading-relaxed text-zinc-500">
+                Apply a preset so autonomous actuators show <strong class="text-zinc-300">ACTIVE</strong> immediately for presentations. Each scenario clears other demo flags on the server.
+            </p>
+
+            <div class="flex max-w-[520px] flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button type="button" class="dev-scenario-btn dash-dev-scenario" data-scenario="cold_night">Simulate cold night</button>
+                <button type="button" class="dev-scenario-btn dash-dev-scenario" data-scenario="hot_room">Hot room</button>
+                <button type="button" class="dev-scenario-btn dash-dev-scenario" data-scenario="noisy_room">Noisy room</button>
+                <button type="button" class="dev-scenario-btn dash-dev-scenario" data-scenario="voc_spike">VOC spike</button>
+                <button type="button" class="dev-scenario-btn dash-dev-scenario" data-scenario="clear">Clear scenarios</button>
+            </div>
+            <p id="dev-simulation-status-msg" class="mt-3 text-[0.78rem] text-zinc-600"></p>
+            {% if current_user.role == 'Admin' %}
+            <div class="mt-4 border-t border-white/10 pt-4">
+                <p class="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">Outbound API Payload</p>
+                <pre class="dash-pre-log"><code id="outbound-payload-simulation" class="font-mono text-teal-200/90">{{ '{}' }}</code></pre>
+                <p class="mt-2 text-[0.72rem] italic text-zinc-600">Note: Physical HVAC/Smart Bulb endpoints disconnected. System is successfully generating and broadcasting state intent.</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% include "includes/sleep_coach_panel.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.__DASH_BOOT__ = { page: 'control', live: {} };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

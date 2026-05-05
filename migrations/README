@@ -1,0 +1,8 @@
+Single-database Alembic migrations for this project.
+
+Quick start:
+1) pip install -r requirements.txt
+2) alembic upgrade head
+
+If your SQLite DB is not at instance/server.db, pass:
+alembic -x db_url="sqlite:///path/to/server.db" upgrade head

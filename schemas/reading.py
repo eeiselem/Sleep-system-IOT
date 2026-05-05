@@ -6,24 +6,24 @@ from utils import (
 )
 
 
-# defines the reading model for the database
-# Temperature / humidity match other channels: AES-256-GCM envelopes (see utils / firmware).
+# reading table model
+# temp/humidity are encrypted like other channels
 class Reading(db.Model):
     __tablename__ = "readings"
 
-    # Primary Key: Unique ID for each database row
+    # row id
     id = db.Column(db.Integer, primary_key=True, index=True)
 
-    # Owning account (ESP ingest defaults to the first user row; seed assigns per user).
+    # owner user
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
 
-    # timestamp of when the reading when a row is created
+    # row timestamp
     timestamp = db.Column(
         db.DateTime(timezone=True),
         default=get_current_utc_time,
     )
 
-    # Private Database Columns: AES-256-GCM ciphertext (nonce||tag||ct, Base64).
+    # encrypted DB columns
     _temperature = db.Column("temperature", db.String(512), nullable=True)
     _humidity = db.Column("humidity", db.String(512), nullable=True)
     _air_quality = db.Column("air_quality", db.String(255), nullable=True)
