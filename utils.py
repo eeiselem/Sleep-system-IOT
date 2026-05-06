@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
+"""Crypto, parsing, and formatting helpers shared by backend modules."""
+
 # load values from .env
 load_dotenv()
 
@@ -19,10 +21,12 @@ aes_256_key = hashlib.sha256(master_key).digest()
 
 
 def get_current_utc_time():
+    # Single source for UTC "now" so tests and call sites stay consistent.
     return datetime.now(timezone.utc)
 
 
 def to_float_or_none(value: Any) -> Optional[float]:
+    # Best-effort numeric parse; return None on invalid values.
     if value is None:
         return None
     try:
@@ -32,6 +36,7 @@ def to_float_or_none(value: Any) -> Optional[float]:
 
 
 def mean_or_none(values: list[Optional[float]]) -> Optional[float]:
+    # Mean over non-null values only.
     clean = [v for v in values if v is not None]
     if not clean:
         return None
@@ -57,6 +62,7 @@ def try_aes256_gcm_decrypt_b64(blob_b64: str) -> Optional[str]:
 
 
 def encrypt_at_rest(data: str) -> str:
+    # Encrypt plaintext field to base64(nonce+tag+ciphertext) for DB storage.
     if data is None or data == "N/A":
         return data
 
@@ -140,6 +146,7 @@ def decrypt_stored_reading_field(blob: Optional[str]) -> Optional[str]:
 
 
 def _pkcs7_unpad(data: bytes) -> bytes:
+    # Remove PKCS#7 padding for AES-CBC biometric payloads.
     if not data:
         raise ValueError("empty ciphertext")
     pad = data[-1]

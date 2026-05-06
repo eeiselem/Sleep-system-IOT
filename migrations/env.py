@@ -4,15 +4,28 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from db import db
-from schemas.micro_arousal_event import MicroArousalEvent
-from schemas.reading import Reading
-from schemas.sleep_readiness_score import SleepReadinessScore
-from schemas.sleep_score_discrepancy_log import SleepScoreDiscrepancyLog
-from schemas.sleep_session import SleepSession
-from schemas.subjective_sleep_review import SubjectiveSleepReview
-from schemas.user import User
+from schemas import (
+    micro_arousal_event,
+    reading,
+    sleep_readiness_score,
+    sleep_score_discrepancy_log,
+    sleep_session,
+    subjective_sleep_review,
+    user,
+)
 
 config = context.config
+# Model module imports are intentionally referenced
+# so SQLAlchemy metadata is fully populated.
+_MODEL_MODULES = (
+    micro_arousal_event,
+    reading,
+    sleep_readiness_score,
+    sleep_score_discrepancy_log,
+    sleep_session,
+    subjective_sleep_review,
+    user,
+)
 target_metadata = db.metadata
 
 

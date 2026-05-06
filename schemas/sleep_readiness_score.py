@@ -1,5 +1,7 @@
 from db import db
 
+"""Legacy daily readiness table kept for compatibility."""
+
 
 class SleepReadinessScore(db.Model):
     __tablename__ = "sleep_readiness_scores"

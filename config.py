@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+"""Shared constants for scoring, thresholds, and defaults."""
+
 from crud.reading import EVENT_LOG_METRIC_LABELS
 
 

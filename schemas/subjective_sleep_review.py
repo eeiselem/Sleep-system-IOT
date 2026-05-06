@@ -3,6 +3,8 @@ from sqlalchemy import UniqueConstraint
 from db import db
 from utils import get_current_utc_time
 
+"""Morning subjective review rows (1-5 rating + optional notes)."""
+
 
 class SubjectiveSleepReview(db.Model):
     __tablename__ = "morning_sleep_feedback"
@@ -20,7 +22,10 @@ class SubjectiveSleepReview(db.Model):
     rating = db.Column(db.Integer, nullable=False)
     notes = db.Column(db.Text, nullable=True)
     linked_sleep_session_id = db.Column(
-        db.Integer, db.ForeignKey("sleep_sessions.id"), nullable=True, index=True
+        db.Integer,
+        db.ForeignKey("sleep_sessions.id"),
+        nullable=True,
+        index=True,
     )
     algorithm_readiness_snapshot = db.Column(db.Float, nullable=True)
     created_at = db.Column(

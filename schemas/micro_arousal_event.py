@@ -1,6 +1,8 @@
 from db import db
 from utils import get_current_utc_time
 
+"""Detected micro-arousal events derived from noise/PRV patterns."""
+
 
 class MicroArousalEvent(db.Model):
     __tablename__ = "micro_arousal_events"

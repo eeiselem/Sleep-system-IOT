@@ -1,6 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+"""Reading table CRUD helpers.
+
+This module wraps common reading queries used by multiple routes.
+"""
+
 from sqlalchemy import and_
 
 from schemas.reading import Reading
@@ -35,6 +40,7 @@ EVENT_LOG_METRIC_LABELS = {
 
 
 def _query_for_user(user_id=None):
+    # Optional user scoping helper reused by most queries in this module.
     q = Reading.query
     if user_id is not None:
         q = q.filter(Reading.user_id == user_id)
@@ -42,6 +48,7 @@ def _query_for_user(user_id=None):
 
 
 def _reading_to_dict(reading: Reading):
+    # Legacy serializer used by older code paths.
     return {
         "timestamp": reading.timestamp,
         "temperature": reading.temperature,
@@ -57,6 +64,7 @@ def _reading_to_dict(reading: Reading):
 
 
 def _as_utc(dt: datetime) -> datetime:
+    # Normalize datetime for consistent UTC comparisons.
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
@@ -74,6 +82,7 @@ def create(
     hrv_rmssd=None,
     user_id=None,
 ):
+    # Create and commit one encrypted reading row.
     try:
         new_reading = Reading(
             temperature=temperature,
@@ -97,6 +106,7 @@ def create(
 
 
 def read_latest(user_id=None):
+    # Return newest reading for user (or global newest when user_id is None).
     try:
         q = _query_for_user(user_id)
         reading = q.order_by(
@@ -112,6 +122,7 @@ def read_latest(user_id=None):
 
 
 def read_all(num_samples=50, user_id=None) -> List[Reading]:
+    # Return latest N readings in descending time order.
     try:
         q = _query_for_user(user_id)
         readings = (
@@ -126,6 +137,7 @@ def read_all(num_samples=50, user_id=None) -> List[Reading]:
 
 
 def _parse_reading_numeric(value) -> Optional[float]:
+    # Parse float from encrypted/decrypted strings used in event-log filters.
     if value is None:
         return None
     text = str(value).strip()
@@ -147,7 +159,8 @@ def read_event_log(
     row_cap: int = 1200,
     user_id: Optional[int] = None,
 ) -> Optional[List[Reading]]:
-    # Read event-log rows in time order, optional threshold filter.
+    # Read event-log rows in time order.
+    # Optionally apply threshold filter for one metric.
     try:
         cap = max(1, min(int(row_cap), 5000))
     except (TypeError, ValueError):
@@ -235,9 +248,9 @@ def read_search(
     effective_metric = metric
     effective_thresh = threshold
     effective_dir = direction
-    if (
-        effective_metric in (None, "")
-        and threshold_temperature not in (None, "")
+    if effective_metric in (None, "") and threshold_temperature not in (
+        None,
+        "",
     ):
         effective_metric = "temperature"
         effective_thresh = threshold_temperature

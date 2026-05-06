@@ -1,12 +1,18 @@
 import os
 
+"""Flask app entrypoint and startup wiring.
+
+This module wires extensions, creates tables for local runs,
+registers blueprints, and starts background workers.
+"""
+
 from dotenv import load_dotenv
 from flask import Flask
 from flask_bcrypt import Bcrypt
 
 from blueprints import register_blueprints
 from db import db
-from extensions import init_extensions, login_manager
+from extensions import init_extensions
 from room_sim import init_room_sim, start_background_tasks
 from schemas.user import User
 from utils import format_temperature_fahrenheit_display
@@ -35,7 +41,9 @@ def ensure_demo_users() -> None:
         db.session.commit()
         print("--- Admin Account Created: Use 'admin' and 'admin' ---")
     if not User.query.filter_by(username="testuser").first():
-        hashed_pw = bcrypt.generate_password_hash("password123").decode("utf-8")
+        hashed_pw = bcrypt.generate_password_hash(
+            "password123"
+        ).decode("utf-8")
         db.session.add(
             User(username="testuser", password_hash=hashed_pw, role="User")
         )

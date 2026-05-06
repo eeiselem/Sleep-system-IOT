@@ -5,6 +5,12 @@ from utils import (
     encrypt_at_rest,
 )
 
+"""Reading ORM model with encrypted sensor channels.
+
+Each sensor value is stored encrypted-at-rest and exposed through
+properties that decrypt on read.
+"""
+
 
 # reading table model
 # temp/humidity are encrypted like other channels
@@ -15,7 +21,12 @@ class Reading(db.Model):
     id = db.Column(db.Integer, primary_key=True, index=True)
 
     # owner user
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
 
     # row timestamp
     timestamp = db.Column(
@@ -104,15 +115,21 @@ class Reading(db.Model):
 
     @air_quality.setter
     def air_quality(self, value):
-        self._air_quality = None if value is None else encrypt_at_rest(str(value))
+        self._air_quality = (
+            None if value is None else encrypt_at_rest(str(value))
+        )
 
     @ambient_noise.setter
     def ambient_noise(self, value):
-        self._ambient_noise = None if value is None else encrypt_at_rest(str(value))
+        self._ambient_noise = (
+            None if value is None else encrypt_at_rest(str(value))
+        )
 
     @heart_rate.setter
     def heart_rate(self, value):
-        self._heart_rate = None if value is None else encrypt_at_rest(str(value))
+        self._heart_rate = (
+            None if value is None else encrypt_at_rest(str(value))
+        )
 
     @spo2.setter
     def spo2(self, value):
@@ -120,12 +137,18 @@ class Reading(db.Model):
 
     @gyro_variance.setter
     def gyro_variance(self, value):
-        self._gyro_variance = None if value is None else encrypt_at_rest(str(value))
+        self._gyro_variance = (
+            None if value is None else encrypt_at_rest(str(value))
+        )
 
     @ambient_light.setter
     def ambient_light(self, value):
-        self._ambient_light = None if value is None else encrypt_at_rest(str(value))
+        self._ambient_light = (
+            None if value is None else encrypt_at_rest(str(value))
+        )
 
     @hrv_rmssd.setter
     def hrv_rmssd(self, value):
-        self._hrv_rmssd = None if value is None else encrypt_at_rest(str(value))
+        self._hrv_rmssd = (
+            None if value is None else encrypt_at_rest(str(value))
+        )
