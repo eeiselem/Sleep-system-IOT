@@ -1,3 +1,6 @@
+// Wi-Fi: use central ESP32/secrets.h (copy from secrets.h.example in that folder).
+#include "../secrets.h"
+
 #include <Wire.h>             // i2c
 #include <Adafruit_MPU6050.h> // gyro
 #include <Adafruit_Sensor.h>  // gyro
@@ -9,15 +12,12 @@
 #include "mbedtls/aes.h"      // encryption
 #include "mbedtls/base64.h"   // Base64
 
-// Wi-Fi credentials
-const String ssid = "YOUR_SSID";           // WiFi SSID
-const String password = "YOUR_PASSWORD";  // WiFi password
-
 // Wi-Fi mode
 wifi_mode_t wifi_mode = WIFI_STA;  // WiFi connection type
 
 // Server config
 const String server_url = "YOUR_SERVER_IP";  // Server url; update from running server file output
+const String ingest_api_key = "ingest-api-key";  // Must match server INGEST_API_KEY
 
 // AES-128-CBC Configuration
 // 16 bytes (128 bits) key and IV. Must match the Python server for decoding.
@@ -347,7 +347,7 @@ void hrSpo2() {
 void initWiFi() {
   // Setup connection
   WiFi.mode(wifi_mode);
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi...");
 
   // Wait for connection
@@ -386,6 +386,7 @@ void post_data() {
     String full_server_url = server_url + "/biometric";  // Full route url
     http.begin(full_server_url);                         // Begin http send
     http.addHeader("Content-Type", "application/json");  // http header
+    http.addHeader("X-API-KEY", ingest_api_key);
 
     // Create json document
     StaticJsonDocument<200> data_doc;

@@ -3,6 +3,12 @@ import os
 import secrets
 from functools import wraps
 
+"""Ingest endpoints for ESP32 device payloads.
+
+This blueprint validates incoming payloads, checks API keys,
+stores normalized readings, and then triggers state updates.
+"""
+
 from flask import Blueprint, current_app, request
 from pydantic import ValidationError
 
@@ -17,10 +23,12 @@ bp = Blueprint("ingest", __name__)
 
 
 def _digest_ingest_key(value: str) -> bytes:
+    # Hash key material before compare to avoid leaking timing on raw strings.
     return hashlib.sha256((value or "").encode("utf-8")).digest()
 
 
 def _require_ingest_api_key():
+    # Common auth gate for all ingest endpoints.
     expected_key = (os.getenv("INGEST_API_KEY") or "").strip()
     if not expected_key:
         return {
@@ -48,6 +56,7 @@ def require_api_key(fn):
 
 
 def _json_object_body():
+    # Enforce JSON object body (not array/string/null).
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return None, ({"error": "JSON object body required"}, 400)
@@ -55,11 +64,13 @@ def _json_object_body():
 
 
 def _cache_bump():
+    # Keep sim cache count in sync when new readings land.
     if room_sim.total_records_cache is not None:
         room_sim.total_records_cache += 1
 
 
 def _run_post_ingest_state_update(log_context: str) -> None:
+    # Ingest should not fail hard if state refresh throws.
     try:
         evaluate_sleep_state(current_app)
     except Exception:
@@ -86,6 +97,7 @@ def persist_reading_base(clean_data: ReadingBase) -> None:
 @bp.route("/post-data", methods=["POST"])
 @require_api_key
 def receive_data():
+    # Old combined endpoint (env node + biometric in one row).
     payload, err = _json_object_body()
     if err is not None:
         return err
@@ -95,7 +107,10 @@ def receive_data():
         persist_reading_base(clean_data)
         return {"status": "success"}, 200
     except ValidationError as e:
-        return {"error": "Invalid data format", "details": e.errors()}, 400
+        return {
+            "error": "Invalid /post-data payload.",
+            "details": e.errors(),
+        }, 400
     except Exception as e:
         return {"error": str(e)}, 500
 
@@ -103,6 +118,7 @@ def receive_data():
 @bp.route("/post-environment", methods=["POST"])
 @require_api_key
 def receive_environment():
+    # Env node endpoint.
     payload, err = _json_object_body()
     if err is not None:
         return err
@@ -128,7 +144,10 @@ def receive_environment():
 
         return {"status": "success"}, 200
     except ValidationError as e:
-        return {"error": "Invalid data format", "details": e.errors()}, 400
+        return {
+            "error": "Invalid /post-environment payload.",
+            "details": e.errors(),
+        }, 400
     except Exception as e:
         return {"error": str(e)}, 500
 
@@ -136,6 +155,7 @@ def receive_environment():
 @bp.route("/biometric", methods=["POST"])
 @require_api_key
 def receive_biometric():
+    # Biometric node sends encrypted text, not JSON.
     body = (request.get_data(as_text=True) or "").strip()
     obj, dec_err = decrypt_biometric_aes128_cbc_b64(body)
     if dec_err:
@@ -144,7 +164,10 @@ def receive_biometric():
     try:
         clean = BiometricPayload(**obj)
     except ValidationError as e:
-        return {"error": "Invalid biometric payload", "details": e.errors()}, 400
+        return {
+            "error": "Invalid biometric payload",
+            "details": e.errors(),
+        }, 400
 
     try:
         reading.create(
@@ -157,7 +180,9 @@ def receive_biometric():
             spo2=ingest_field_plaintext(clean.spo2),
             gyro_variance=ingest_field_plaintext(clean.gyro),
             hrv_rmssd=(
-                ingest_field_plaintext(clean.hrv) if clean.hrv is not None else None
+                ingest_field_plaintext(clean.hrv)
+                if clean.hrv is not None
+                else None
             ),
             user_id=default_ingest_user_id(),
         )

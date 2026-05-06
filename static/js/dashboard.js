@@ -242,8 +242,12 @@ const DASH_PAGE = typeof DASH_BOOT.page === 'string' ? DASH_BOOT.page : '';
     function normalizeAirQualityScore(val) {
         const n = Number(val);
         if (!Number.isFinite(n)) return null;
-        // Lower raw value means cleaner air; invert so higher score is better.
-        const clamped = Math.max(0, Math.min(500, n));
+        // Stored field should be 0..500 (higher = worse). Legacy firmware sent raw ADC blend (~0..4095).
+        let scaled = n;
+        if (n > 500) {
+            scaled = Math.min(500, (n / 4095) * 500);
+        }
+        const clamped = Math.max(0, Math.min(500, scaled));
         return Math.max(1, Math.min(100, Math.round(100 - ((clamped / 500) * 99))));
     }
 
@@ -601,9 +605,13 @@ const DASH_PAGE = typeof DASH_BOOT.page === 'string' ? DASH_BOOT.page : '';
         sessions.forEach((s) => {
             const opt = document.createElement('option');
             opt.value = String(s.id);
-            const badge = s.fsm_active ? ' · live ASLEEP'
-                : s.ongoing ? ' · in progress'
-                : '';
+            const kind = s.session_ui_kind;
+            let badge = '';
+            if (kind === 'live_sleep') {
+                badge = ' · live ASLEEP';
+            } else if (kind === 'open_idle') {
+                badge = ' · open (not live ASLEEP)';
+            }
             const baseLabel = s.display_label
                 || `Sleep session ${s.id}`;
             opt.textContent = `${baseLabel}${badge}`;
@@ -793,7 +801,7 @@ const DASH_PAGE = typeof DASH_BOOT.page === 'string' ? DASH_BOOT.page : '';
             {
                 wrapId: 'sleep-wrap-prv_ms',
                 canvasId: 'sleepChartPrv',
-                field: 'prv_ms',
+                field: 'hrv_chart_ms',
                 yTitle: 'HRV / PRV (ms)',
                 color: '#7ef2c5',
                 beginAtZero: true,
