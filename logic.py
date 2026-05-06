@@ -24,16 +24,6 @@ from timefmt import to_utc_datetime, utc_isoformat_z
 from utils import get_current_utc_time, to_float_or_none
 
 
-def _utc_calendar_date(dt: datetime) -> date:
-    # Utility: convert any datetime to UTC calendar date.
-    return to_utc_datetime(dt).date()
-
-
-def _as_utc(dt: datetime) -> datetime:
-    # Utility: normalize datetime to UTC timezone-aware object.
-    return to_utc_datetime(dt)
-
-
 _DEFAULT_INGEST_UID_CACHE: Optional[int] = None
 _DEFAULT_INGEST_UID_LOADED = False
 
@@ -63,7 +53,7 @@ def _latest_sleep_session_ended_on(
     for s in candidates:
         if (
             s.ended_at is not None
-            and _utc_calendar_date(s.ended_at) == cal_date
+            and to_utc_datetime(s.ended_at).date() == cal_date
         ):
             return s
     return None
@@ -75,8 +65,8 @@ def celsius_mean_between(
     user_id: Optional[int] = None,
 ) -> Optional[float]:
     # Mean temp in [start, end], returned as Fahrenheit.
-    window_start_utc = _as_utc(window_start_utc)
-    window_end_utc = _as_utc(window_end_utc)
+    window_start_utc = to_utc_datetime(window_start_utc)
+    window_end_utc = to_utc_datetime(window_end_utc)
 
     rq = Reading.query.filter(Reading.timestamp >= window_start_utc).filter(
         Reading.timestamp <= window_end_utc

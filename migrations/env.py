@@ -7,7 +7,6 @@ from db import db
 from schemas import (
     micro_arousal_event,
     reading,
-    sleep_readiness_score,
     sleep_score_discrepancy_log,
     sleep_session,
     subjective_sleep_review,
@@ -20,7 +19,6 @@ config = context.config
 _MODEL_MODULES = (
     micro_arousal_event,
     reading,
-    sleep_readiness_score,
     sleep_score_discrepancy_log,
     sleep_session,
     subjective_sleep_review,

@@ -42,6 +42,7 @@ from utils import get_current_utc_time
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
+# Shared API limits/constants.
 WAKE_TIME_FORMAT_ERROR = "wake_time must be in HH:MM format (24-hour)"
 SUBJECTIVE_HISTORY_LIMIT_DEFAULT = 40
 SUBJECTIVE_HISTORY_LIMIT_MAX = 120
@@ -88,6 +89,7 @@ def user_config():
     payload = request.get_json(silent=True) or {}
 
     def parse_optional_float(value):
+        # Allow blank values; parse when provided.
         if value in (None, ""):
             return None
         try:
@@ -254,10 +256,12 @@ def subjective_sleep_review_save():
         feedback_for_date=session_date,
     ).first()
     if row:
+        # Overwrite today's existing review row.
         row.rating = payload.rating
         row.notes = notes_str
         row.created_at = get_current_utc_time()
     else:
+        # First review row for this date.
         row = SubjectiveSleepReview(
             user_id=current_user.id,
             feedback_for_date=session_date,
@@ -404,8 +408,6 @@ short title and fitting emoji (for example 🌬️ Air quality, 🫀 Vitals,
 
 Tone and content rules:
 - Start like a coach speaking to the user.
-- Do not apologize, hedge about gaps, or mention missing/unavailable
-  sensors or values.
 - Silently analyze only what appears in the JSON and skip topics with no
   usable values.
 - Give practical sleep-hygiene and environment tweaks aligned with the data.

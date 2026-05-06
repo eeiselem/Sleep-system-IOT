@@ -10,12 +10,14 @@ bp = Blueprint("auth", __name__)
 
 @login_manager.user_loader
 def load_user(user_id):
+    # Flask-Login callback: restore user from session id.
     return db.session.get(User, int(user_id))
 
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        # Plain form auth for project demo accounts.
         username = request.form.get("username")
         password = request.form.get("password")
         user = User.query.filter_by(username=username).first()
@@ -28,6 +30,7 @@ def login():
 
 @bp.route("/logout")
 def logout():
+    # Clear login session and return to login screen.
     logout_user()
     print("User logged out successfully.")
     return redirect(url_for("auth.login"))

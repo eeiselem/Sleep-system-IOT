@@ -241,25 +241,13 @@ def read_search(
     direction: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    threshold_temperature: Optional[object] = None,
     user_id: Optional[int] = None,
 ) -> Optional[List[Reading]]:
-    # Backward-compatible wrapper around read_event_log.
-    effective_metric = metric
-    effective_thresh = threshold
-    effective_dir = direction
-    if effective_metric in (None, "") and threshold_temperature not in (
-        None,
-        "",
-    ):
-        effective_metric = "temperature"
-        effective_thresh = threshold_temperature
-        effective_dir = effective_dir or "above"
-
+    # Thin wrapper around read_event_log.
     return read_event_log(
-        metric=effective_metric,
-        threshold_raw=effective_thresh,
-        direction=effective_dir,
+        metric=metric,
+        threshold_raw=threshold,
+        direction=direction,
         start_date=start_date,
         end_date=end_date,
         user_id=user_id,

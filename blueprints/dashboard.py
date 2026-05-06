@@ -22,21 +22,22 @@ bp = Blueprint("dashboard", __name__)
 
 
 def _pop_event_log_query_keys_only():
+    # Clear active event-log filter params from session.
     session.pop("event_metric", None)
     session.pop("event_threshold", None)
     session.pop("event_direction", None)
     session.pop("start_datetime", None)
     session.pop("end_datetime", None)
-    session.pop("threshold_temperature", None)
-    session.pop("direction", None)
 
 
 def _pop_event_log_session_keys():
+    # Full clear includes any prior validation error text.
     _pop_event_log_query_keys_only()
     session.pop("event_log_error", None)
 
 
 def _overview_live_kwargs():
+    # Base payload for overview cards from merged live stream.
     live = build_latest_live_readings_payload(current_user.id)
     return {
         "live_readings_initial": live,
@@ -80,6 +81,7 @@ def _admin_event_log_kwargs():
         return True
 
     if current_user.role == "Admin" and _has_valid_breach_query():
+        # Optional local time window from the UI form.
         start_date = parse_local_datetime_to_utc(start_datetime_str or None)
         end_date = parse_local_datetime_to_utc(end_datetime_str or None)
 
@@ -96,7 +98,6 @@ def _admin_event_log_kwargs():
             direction=direction,
             start_date=start_date,
             end_date=end_date,
-            threshold_temperature=None,
         )
         lbl = EVENT_LOG_BREACH_LABELS[event_metric]
         event_log_summary = (
@@ -144,6 +145,7 @@ def index():
 @bp.route("/dashboard/overview")
 @login_required
 def overview():
+    # Non-admin users do not carry event-log filters.
     if getattr(current_user, "role", None) != "Admin":
         _pop_event_log_query_keys_only()
     kwargs = {"user": current_user}
@@ -174,6 +176,7 @@ def control_center():
 @bp.route("/dashboard/data")
 @login_required
 def data():
+    # Data page gets extra event-log context for admins only.
     if getattr(current_user, "role", None) != "Admin":
         _pop_event_log_query_keys_only()
     kwargs = {
@@ -194,6 +197,7 @@ def admin_console():
 
     users = User.query.order_by(User.id).all()
     try:
+        # Small stats block shown on admin dashboard page.
         counts = {
             "users": User.query.count(),
             "readings": Reading.query.count(),
@@ -227,6 +231,7 @@ def event_log_search():
     end = request.form.get("end_time") or ""
 
     def _reject(msg: str):
+        # Keep form values in session so the page can show feedback.
         session["event_log_error"] = msg
         session["event_metric"] = metric
         session["event_threshold"] = threshold or ""
@@ -255,8 +260,6 @@ def event_log_search():
     if direction not in ("above", "below"):
         direction = "below"
 
-    session.pop("threshold_temperature", None)
-    session.pop("direction", None)
     session.pop("event_log_error", None)
 
     session["event_metric"] = metric
@@ -268,37 +271,9 @@ def event_log_search():
     return redirect(url_for("dashboard.data"))
 
 
-@bp.route("/submit-temperature-search", methods=["POST"])
-@login_required
-def temperature_search():
-    if getattr(current_user, "role", None) != "Admin":
-        return redirect(url_for("dashboard.overview"))
-    thresh = request.form.get("threshold_temperature")
-    direction = request.form.get("direction") or "above"
-    start = request.form.get("start_time") or ""
-    end = request.form.get("end_time") or ""
-    session["event_metric"] = ""
-    session["event_threshold"] = thresh
-    session["event_direction"] = direction
-    session["threshold_temperature"] = thresh
-    session["direction"] = direction
-    session["start_datetime"] = start
-    session["end_datetime"] = end
-    return redirect(url_for("dashboard.data"))
-
-
 @bp.route("/clear-event-log-search", methods=["POST"])
 @login_required
 def clear_event_log_search():
-    if getattr(current_user, "role", None) != "Admin":
-        return redirect(url_for("dashboard.overview"))
-    _pop_event_log_session_keys()
-    return redirect(url_for("dashboard.data"))
-
-
-@bp.route("/clear-temperature-search", methods=["POST"])
-@login_required
-def clear_search():
     if getattr(current_user, "role", None) != "Admin":
         return redirect(url_for("dashboard.overview"))
     _pop_event_log_session_keys()

@@ -11,6 +11,8 @@ from schemas.reading import Reading
 from timefmt import utc_isoformat_z
 from utils import restlessness_score_from_raw
 
+LIVE_ROWS_LOOKBACK_LIMIT = 1000
+
 
 def _row_looks_biometric_only(r: Reading) -> bool:
     # Heuristic: biometric-only rows should not overwrite env tiles.
@@ -115,7 +117,12 @@ def build_latest_live_readings_payload(user_id: int) -> Dict[str, Any]:
         "restlessness_score_updated_at": None,
         "hrv_rmssd_updated_at": None,
     }
-    rows = fetch_recent_user_rows(user_id, limit=80, ascending=False)
+    # Use a wider lookback so sparse biometric channels still show last value.
+    rows = fetch_recent_user_rows(
+        user_id,
+        limit=LIVE_ROWS_LOOKBACK_LIMIT,
+        ascending=False,
+    )
     merged = _merge_latest_readings_display(rows)
     if not merged:
         return empty

@@ -24,28 +24,6 @@ class AppBaseModel(BaseModel):
         return v
 
 
-class ReadingBase(AppBaseModel):
-    model_config = ConfigDict(
-        str_strip_whitespace=True,
-        from_attributes=True,
-        populate_by_name=True,
-    )
-
-    temperature: str
-    humidity: str
-    air_quality: str = Field(
-        validation_alias=AliasChoices("air_quality", "voc_level"),
-    )
-    ambient_noise: str
-    ambient_light: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices("ambient_light", "light_level"),
-    )
-    heart_rate: str
-    spo2: str
-    gyro_variance: str
-
-
 class EnvironmentReadingIn(AppBaseModel):
     # Payload from env-only board (/post-environment).
 

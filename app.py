@@ -20,6 +20,7 @@ from utils import format_temperature_fahrenheit_display
 load_dotenv()
 
 app = Flask(__name__)
+# Shared template filter used across dashboard pages.
 app.add_template_filter(format_temperature_fahrenheit_display, "temp_f")
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///server.db"
@@ -27,11 +28,14 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 
+# Extension wiring (login manager, bcrypt, etc).
 init_extensions(app)
+# Set up demo-mode room state container.
 init_room_sim(app)
 
 
 def ensure_demo_users() -> None:
+    # Local/demo accounts so the app works right away after first boot.
     bcrypt = Bcrypt(app)
     if not User.query.filter_by(username="admin").first():
         hashed_pw = bcrypt.generate_password_hash("admin").decode("utf-8")
@@ -51,10 +55,13 @@ def ensure_demo_users() -> None:
 
 
 with app.app_context():
+    # Dev startup path: create tables and seed demo users.
     db.create_all()
     ensure_demo_users()
 
+# Register all routes before workers start.
 register_blueprints(app)
+# Starts sleep-state and room background loops.
 start_background_tasks()
 
 if __name__ == "__main__":

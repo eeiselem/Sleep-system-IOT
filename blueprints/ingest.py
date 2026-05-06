@@ -16,7 +16,7 @@ import room_sim
 
 from crud import reading
 from logic import default_ingest_user_id, evaluate_sleep_state
-from models import BiometricPayload, EnvironmentReadingIn, ReadingBase
+from models import BiometricPayload, EnvironmentReadingIn
 from utils import decrypt_biometric_aes128_cbc_b64, ingest_field_plaintext
 
 bp = Blueprint("ingest", __name__)
@@ -47,6 +47,7 @@ def _require_ingest_api_key():
 def require_api_key(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        # Block request early if device key is missing/wrong.
         rejected = _require_ingest_api_key()
         if rejected is not None:
             return rejected
@@ -77,44 +78,6 @@ def _run_post_ingest_state_update(log_context: str) -> None:
         current_app.logger.exception(log_context)
 
 
-def persist_reading_base(clean_data: ReadingBase) -> None:
-    # Save full reading row, then update sleep state.
-    reading.create(
-        temperature=ingest_field_plaintext(clean_data.temperature),
-        humidity=ingest_field_plaintext(clean_data.humidity),
-        air_quality=ingest_field_plaintext(clean_data.air_quality),
-        ambient_noise=ingest_field_plaintext(clean_data.ambient_noise),
-        ambient_light=ingest_field_plaintext(clean_data.ambient_light),
-        heart_rate=ingest_field_plaintext(clean_data.heart_rate),
-        spo2=ingest_field_plaintext(clean_data.spo2),
-        gyro_variance=ingest_field_plaintext(clean_data.gyro_variance),
-        user_id=default_ingest_user_id(),
-    )
-    _run_post_ingest_state_update("evaluate_sleep_state failed after ingest")
-    _cache_bump()
-
-
-@bp.route("/post-data", methods=["POST"])
-@require_api_key
-def receive_data():
-    # Old combined endpoint (env node + biometric in one row).
-    payload, err = _json_object_body()
-    if err is not None:
-        return err
-
-    try:
-        clean_data = ReadingBase(**payload)
-        persist_reading_base(clean_data)
-        return {"status": "success"}, 200
-    except ValidationError as e:
-        return {
-            "error": "Invalid /post-data payload.",
-            "details": e.errors(),
-        }, 400
-    except Exception as e:
-        return {"error": str(e)}, 500
-
-
 @bp.route("/post-environment", methods=["POST"])
 @require_api_key
 def receive_environment():
@@ -124,6 +87,7 @@ def receive_environment():
         return err
 
     try:
+        # Parse env node payload, then persist env-only row.
         clean_data = EnvironmentReadingIn(**payload)
         reading.create(
             temperature=ingest_field_plaintext(clean_data.temperature),
@@ -157,6 +121,7 @@ def receive_environment():
 def receive_biometric():
     # Biometric node sends encrypted text, not JSON.
     body = (request.get_data(as_text=True) or "").strip()
+    # Decrypt transport payload first, then validate JSON shape.
     obj, dec_err = decrypt_biometric_aes128_cbc_b64(body)
     if dec_err:
         return {"error": dec_err}, 400

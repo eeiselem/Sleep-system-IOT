@@ -107,14 +107,19 @@ const DASH_PAGE = typeof DASH_BOOT.page === 'string' ? DASH_BOOT.page : '';
         return deltaMs / 60000;
     }
 
-    // Minutes-to-wake source: config input or API wake_time.
-    function getUnifiedMinutesToWake() {
+    // Minutes-to-wake source: configured wake time only.
+    function getConfiguredWakeClockHm() {
         const wakeEl = document.getElementById('cfg-wake-time');
-        let wakeHM = wakeEl && wakeEl.value ? String(wakeEl.value).trim() : '';
-        if (!wakeHM && lastSunriseSequence && lastSunriseSequence.wake_time) {
-            wakeHM = String(lastSunriseSequence.wake_time).trim();
-        }
-        return computeMinutesToWakeFromWakeClockHm(wakeHM);
+        const fromInput =
+            wakeEl && wakeEl.value ? String(wakeEl.value).trim() : '';
+        if (fromInput) return fromInput;
+        return String(savedCfgWakeTime || '').trim();
+    }
+
+    function getUnifiedMinutesToWake() {
+        return computeMinutesToWakeFromWakeClockHm(
+            getConfiguredWakeClockHm(),
+        );
     }
 
     function updateMinutesToWakeDisplay() {
@@ -2458,7 +2463,10 @@ const DASH_PAGE = typeof DASH_BOOT.page === 'string' ? DASH_BOOT.page : '';
             lastSunriseSequence = sunrise;
 
             const wakeVis = document.getElementById('sunrise-wake-time');
-            if (wakeVis) wakeVis.innerText = sunrise.wake_time || '--:--';
+            if (wakeVis) {
+                const configuredWake = getConfiguredWakeClockHm();
+                wakeVis.innerText = configuredWake || '--:--';
+            }
 
             updateMinutesToWakeDisplay();
 
