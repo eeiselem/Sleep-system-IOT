@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""Helpers for sleep charts, session labels, and review APIs.
+
+This module keeps data-shaping logic out of route handlers so
+blueprints stay short and easier to read.
+"""
+
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -9,7 +16,10 @@ from config import (
 )
 from crud import reading as reading_crud
 from db import db
-from logic import _latest_sleep_session_ended_on, get_sleep_session_resolution_context
+from logic import (
+    _latest_sleep_session_ended_on,
+    get_sleep_session_resolution_context,
+)
 from services.readings_service import (
     compact_payload_point,
     downsample_rows,
@@ -73,6 +83,37 @@ def readings_context_anonymized_for_llm(
     }
 
 
+def _mean_prv_ms_from_hr_series(rows: List[Reading]) -> Optional[float]:
+    # Fallback nightly average when hrv_rmssd was never stored.
+    prev_rr: Optional[float] = None
+    prv_vals: List[float] = []
+    for row in sorted(rows, key=lambda r: r.timestamp):
+        hr = to_float_or_none(row.heart_rate)
+        if hr is None or not (35.0 <= float(hr) <= 180.0):
+            prev_rr = None
+            continue
+        rr_ms = 60000.0 / float(hr)
+        if prev_rr is not None:
+            d = abs(rr_ms - prev_rr)
+            if d > 0:
+                prv_vals.append(d)
+        prev_rr = rr_ms
+    return mean_or_none(prv_vals) if prv_vals else None
+
+
+def _hrv_chart_ms(
+    hrv_device_ms: Optional[float],
+    prv_ms: Optional[float],
+) -> Optional[float]:
+    # Chart series: use RMSSD from biometric ingest first, else HR-derived PRV.
+    # Skip literal zeros so the night chart does not flatline at 0.
+    if hrv_device_ms is not None and float(hrv_device_ms) > 0:
+        return round(float(hrv_device_ms), 2)
+    if prv_ms is not None and float(prv_ms) > 0:
+        return float(prv_ms)
+    return None
+
+
 def build_sleep_night_points(readings: List[Reading]) -> List[Dict[str, Any]]:
     # Build time-series points for one sleep window.
     points: List[Dict[str, Any]] = []
@@ -88,6 +129,8 @@ def build_sleep_night_points(readings: List[Reading]) -> List[Dict[str, Any]]:
         else:
             prev_rr = None
 
+        hrv_dev = to_float_or_none(getattr(row, "hrv_rmssd", None))
+
         rs = restlessness_score_from_raw(row.gyro_variance)
         temp_c = to_float_or_none(row.temperature)
         room_temp_f = (
@@ -99,6 +142,8 @@ def build_sleep_night_points(readings: List[Reading]) -> List[Dict[str, Any]]:
             "t": utc_isoformat_z(to_utc_datetime(row.timestamp)),
             "heart_rate": hr,
             "prv_ms": prv_ms,
+            "hrv_rmssd_ms": hrv_dev,
+            "hrv_chart_ms": _hrv_chart_ms(hrv_dev, prv_ms),
             "spo2": to_float_or_none(row.spo2),
             "gyro_variance": to_float_or_none(row.gyro_variance),
             "restlessness_score": rs,
@@ -123,6 +168,34 @@ def _wake_calendar_date(session_row: SleepSession) -> date:
     return to_utc_datetime(session_row.started_at).date()
 
 
+def dedupe_sleep_sessions_for_picker(
+    sessions: List[SleepSession],
+    *,
+    max_out: int = 50,
+) -> List[SleepSession]:
+    # One dropdown row per calendar bucket (based on _wake_calendar_date).
+    # Same-day duplicates collapse: prefer closed session with latest ended_at;
+    # if all are open, prefer the latest started_at.
+    buckets: Dict[date, List[SleepSession]] = defaultdict(list)
+    for s in sessions:
+        buckets[_wake_calendar_date(s)].append(s)
+    picked: List[SleepSession] = []
+    for group in buckets.values():
+        if len(group) == 1:
+            picked.append(group[0])
+            continue
+        closed_g = [x for x in group if x.ended_at is not None]
+        if closed_g:
+            picked.append(max(closed_g, key=lambda x: x.ended_at))
+        else:
+            picked.append(max(group, key=lambda x: x.started_at))
+    picked.sort(
+        key=lambda s: (s.ended_at if s.ended_at is not None else s.started_at),
+        reverse=True,
+    )
+    return picked[:max_out]
+
+
 def _format_sleep_session_display_label(s: SleepSession) -> str:
     wake_d = _wake_calendar_date(s)
     wk = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")[wake_d.weekday()]
@@ -140,12 +213,16 @@ def _format_sleep_session_display_label(s: SleepSession) -> str:
         "Nov",
         "Dec",
     )[wake_d.month - 1]
-    return f"{wk} {wake_d.day} {mon} wake"
+    base = f"{wk} {wake_d.day} {mon}"
+    if s.ended_at is None:
+        return f"{base} · open"
+    return f"{base} · wake"
 
 
 def _pick_completed_sleep_session_wake_date(
     target_d: date, user_id: int
 ) -> Optional[SleepSession]:
+    # Choose the latest closed session that ended on target date.
     best: Optional[SleepSession] = None
     candidates = (
         SleepSession.query.filter(
@@ -157,13 +234,19 @@ def _pick_completed_sleep_session_wake_date(
         .all()
     )
     for s in candidates:
-        if s.ended_at is not None and to_utc_datetime(s.ended_at).date() == target_d:
+        if (
+            s.ended_at is not None
+            and to_utc_datetime(s.ended_at).date() == target_d
+        ):
             if best is None or s.ended_at > best.ended_at:
                 best = s
     return best
 
 
-def _open_sleep_session_started_on(target_d: date, user_id: int) -> Optional[SleepSession]:
+def _open_sleep_session_started_on(
+    target_d: date, user_id: int
+) -> Optional[SleepSession]:
+    # Fallback for active sessions when selected day has no closed session.
     for s in (
         SleepSession.query.filter(
             SleepSession.ended_at.is_(None),
@@ -184,6 +267,7 @@ def resolve_sleep_session_for_night_chart(
     night_param: Any = None,
     viewer_user_id: int,
 ) -> tuple[Optional[SleepSession], Optional[str]]:
+    # Resolve session by id, date hint, active state, then latest fallback.
     if session_id_param is not None and str(session_id_param).strip():
         try:
             sid = int(session_id_param)
@@ -239,7 +323,9 @@ def subjective_review_target_date(now_utc: datetime) -> date:
     return now_utc.date() - timedelta(days=1)
 
 
-def serialize_subjective_sleep_review(row: Optional[SubjectiveSleepReview]) -> Any:
+def serialize_subjective_sleep_review(
+    row: Optional[SubjectiveSleepReview],
+) -> Any:
     if row is None:
         return None
     return {
@@ -262,8 +348,13 @@ def serialize_subjective_sleep_review_history_entry(
     return base
 
 
-def _session_sensor_nightly_averages(sess: SleepSession) -> Dict[str, Optional[float]]:
-    end = sess.ended_at if sess.ended_at is not None else get_current_utc_time()
+def _session_sensor_nightly_averages(
+    sess: SleepSession,
+) -> Dict[str, Optional[float]]:
+    # Build nightly means used by weekly summary cards/charts.
+    end = (
+        sess.ended_at if sess.ended_at is not None else get_current_utc_time()
+    )
     uid = getattr(sess, "user_id", None)
     rows = reading_crud.read_sleep_session_between(
         to_utc_datetime(sess.started_at),
@@ -286,8 +377,8 @@ def _session_sensor_nightly_averages(sess: SleepSession) -> Dict[str, Optional[f
             spo2s.append(s)
         hv = getattr(r, "hrv_rmssd", None)
         hvf = to_float_or_none(hv)
-        if hvf is not None:
-            hrvs.append(hvf)
+        if hvf is not None and float(hvf) > 0:
+            hrvs.append(float(hvf))
         lx = to_float_or_none(r.ambient_light)
         if lx is not None:
             lux.append(lx)
@@ -302,27 +393,43 @@ def _session_sensor_nightly_averages(sess: SleepSession) -> Dict[str, Optional[f
             rs = restlessness_score_from_raw(g)
             if rs is not None:
                 rest.append(float(rs))
+    avg_hrv_rmssd = mean_or_none(hrvs)
+    if avg_hrv_rmssd is None:
+        avg_hrv_rmssd = _mean_prv_ms_from_hr_series(rows)
+
     return {
         "avg_heart_rate_bpm": (
-            round(mean_or_none(hrs), 3) if mean_or_none(hrs) is not None else None
+            round(mean_or_none(hrs), 3)
+            if mean_or_none(hrs) is not None
+            else None
         ),
         "avg_spo2_pct": (
-            round(mean_or_none(spo2s), 3) if mean_or_none(spo2s) is not None else None
+            round(mean_or_none(spo2s), 3)
+            if mean_or_none(spo2s) is not None
+            else None
         ),
         "avg_hrv_rmssd_ms": (
-            round(mean_or_none(hrvs), 3) if mean_or_none(hrvs) is not None else None
+            round(avg_hrv_rmssd, 3) if avg_hrv_rmssd is not None else None
         ),
         "avg_ambient_light_lux": (
-            round(mean_or_none(lux), 3) if mean_or_none(lux) is not None else None
+            round(mean_or_none(lux), 3)
+            if mean_or_none(lux) is not None
+            else None
         ),
         "avg_air_quality_index": (
-            round(mean_or_none(voc), 3) if mean_or_none(voc) is not None else None
+            round(mean_or_none(voc), 3)
+            if mean_or_none(voc) is not None
+            else None
         ),
         "avg_ambient_noise_db": (
-            round(mean_or_none(noise), 3) if mean_or_none(noise) is not None else None
+            round(mean_or_none(noise), 3)
+            if mean_or_none(noise) is not None
+            else None
         ),
         "avg_restlessness_score": (
-            round(mean_or_none(rest), 3) if mean_or_none(rest) is not None else None
+            round(mean_or_none(rest), 3)
+            if mean_or_none(rest) is not None
+            else None
         ),
     }
 

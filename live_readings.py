@@ -1,5 +1,11 @@
 from typing import Any, Dict, List, Optional
 
+"""Build merged live cards from recent mixed sensor rows.
+
+The dashboard can receive environment-only and biometric-only rows,
+so we merge recent values by field instead of relying on one row.
+"""
+
 from services.readings_service import fetch_recent_user_rows
 from schemas.reading import Reading
 from timefmt import utc_isoformat_z
@@ -7,6 +13,7 @@ from utils import restlessness_score_from_raw
 
 
 def _row_looks_biometric_only(r: Reading) -> bool:
+    # Heuristic: biometric-only rows should not overwrite env tiles.
     if r._air_quality is not None or r._ambient_noise is not None:
         return False
     if (
@@ -30,6 +37,7 @@ def _row_looks_biometric_only(r: Reading) -> bool:
 def _merge_latest_readings_display(
     rows: List[Reading],
 ) -> Optional[Dict[str, Any]]:
+    # Merge freshest non-null channel values across recent rows.
     if not rows:
         return None
     out: Dict[str, Any] = {}
@@ -74,6 +82,7 @@ def _merge_latest_readings_display(
 
 
 def _normalize_live_reading_scalar(value: Any) -> Any:
+    # Normalize blanks and N/A placeholders to None for cleaner UI decisions.
     if value is None:
         return None
     if isinstance(value, str):
@@ -84,6 +93,7 @@ def _normalize_live_reading_scalar(value: Any) -> Any:
 
 
 def build_latest_live_readings_payload(user_id: int) -> Dict[str, Any]:
+    # Public helper used by live dashboard cards and polling endpoints.
     empty: Dict[str, Any] = {
         "timestamp": None,
         "temperature": None,
@@ -137,5 +147,7 @@ def build_latest_live_readings_payload(user_id: int) -> Dict[str, Any]:
     sc = restlessness_score_from_raw(gv_raw)
     if sc is not None:
         out["restlessness_score"] = float(sc)
-    out["restlessness_score_updated_at"] = merged.get("gyro_variance_updated_at")
+    out["restlessness_score_updated_at"] = merged.get(
+        "gyro_variance_updated_at"
+    )
     return out

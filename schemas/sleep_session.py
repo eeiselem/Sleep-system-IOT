@@ -1,16 +1,29 @@
 from db import db
 
+"""ORM model for one sleep session window and its computed metrics."""
+
 
 class SleepSession(db.Model):
     __tablename__ = "sleep_sessions"
 
+    # Core identifiers and timing window.
     id = db.Column(db.Integer, primary_key=True)
 
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
 
-    started_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    started_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
     ended_at = db.Column(db.DateTime(timezone=True), nullable=True, index=True)
 
+    # Derived metrics populated after a session is scored.
     readiness_score = db.Column(db.Float, nullable=True)
     sleep_efficiency_pct = db.Column(db.Float, nullable=True)
     sleep_efficiency_score = db.Column(db.Float, nullable=True)
@@ -19,6 +32,5 @@ class SleepSession(db.Model):
     spo2_drop_count = db.Column(db.Integer, nullable=True)
     noise_spike_count = db.Column(db.Integer, nullable=True)
     disturbance_score = db.Column(db.Float, nullable=True)
-    environment_stability_score = db.Column(db.Float, nullable=True)
     sample_count = db.Column(db.Integer, nullable=True)
     calculated_at = db.Column(db.DateTime(timezone=True), nullable=True)

@@ -1,7 +1,9 @@
 import json
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+"""JSON API routes used by the dashboard UI and simulation tools."""
 
 from openai import OpenAI
 from flask import Blueprint, current_app, request
@@ -13,7 +15,6 @@ from db import db
 from live_readings import build_latest_live_readings_payload
 from logic import get_sleep_session_resolution_context, update_optimal_band
 from models import SubjectiveSleepReviewIn
-import room_sim
 from room_sim import (
     append_room_change,
     compute_sunrise_sequence,
@@ -21,7 +22,6 @@ from room_sim import (
     sim_room_lock,
     simulated_room_state,
 )
-from schemas.reading import Reading
 from schemas.sleep_session import SleepSession
 from schemas.subjective_sleep_review import SubjectiveSleepReview
 from sleep_api import (
@@ -35,22 +35,31 @@ from sleep_api import (
     serialize_subjective_sleep_review_history_entry,
     subjective_review_target_date,
     _wake_calendar_date,
+    dedupe_sleep_sessions_for_picker,
 )
 from timefmt import to_utc_datetime, utc_isoformat_z
 from utils import get_current_utc_time
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
+WAKE_TIME_FORMAT_ERROR = "wake_time must be in HH:MM format (24-hour)"
+SUBJECTIVE_HISTORY_LIMIT_DEFAULT = 40
+SUBJECTIVE_HISTORY_LIMIT_MAX = 120
+SUBJECTIVE_HISTORY_DAYS_MAX = 90
+READINESS_HISTORY_LIMIT_DEFAULT = 14
+READINESS_HISTORY_LIMIT_MAX = 90
+SLEEP_SESSION_LIST_QUERY_LIMIT = 120
+SLEEP_SESSION_LIST_MAX_OUT = 50
 
-@bp.route('/user-config', methods=['GET', 'POST'])
+
+@bp.route("/user-config", methods=["GET", "POST"])
 @login_required
 def user_config():
-    allowed_wake_days = {"daily", "weekdays", "weekends"}
-
-    if request.method == 'GET':
+    # Config page load/save endpoint.
+    # GET returns the current values, POST validates and persists updates.
+    if request.method == "GET":
         return {
             "wake_time": current_user.cfg_wake_time,
-            "wake_days": current_user.cfg_wake_days or "daily",
             "guardrail_temp_f_min": (
                 current_user.cfg_guardrail_temp_f_min
                 if current_user.cfg_guardrail_temp_f_min is not None
@@ -71,7 +80,9 @@ def user_config():
                 if current_user.cfg_optimal_band_f_max is not None
                 else 68.0
             ),
-            "override_optimal_band": bool(current_user.cfg_override_optimal_band),
+            "override_optimal_band": bool(
+                current_user.cfg_override_optimal_band
+            ),
         }, 200
 
     payload = request.get_json(silent=True) or {}
@@ -84,7 +95,6 @@ def user_config():
         except (TypeError, ValueError):
             raise ValueError("numeric fields must be valid numbers")
 
-    guardrail_f_min = guardrail_f_max = optimal_f_min = optimal_f_max = None
     try:
         if "wake_time" in payload:
             wake_val = payload.get("wake_time")
@@ -96,21 +106,13 @@ def user_config():
                     or len(wake_val) != 5
                     or wake_val[2] != ":"
                 ):
-                    return {"error": "wake_time must be in HH:MM format"}, 400
+                    return {"error": WAKE_TIME_FORMAT_ERROR}, 400
                 hh, mm = wake_val.split(":")
                 if not (hh.isdigit() and mm.isdigit()):
-                    return {"error": "wake_time must be in HH:MM format"}, 400
+                    return {"error": WAKE_TIME_FORMAT_ERROR}, 400
                 if not (0 <= int(hh) <= 23 and 0 <= int(mm) <= 59):
-                    return {"error": "wake_time must be in HH:MM format"}, 400
+                    return {"error": WAKE_TIME_FORMAT_ERROR}, 400
                 current_user.cfg_wake_time = wake_val
-
-        if "wake_days" in payload:
-            wd = payload.get("wake_days") or "daily"
-            if wd not in allowed_wake_days:
-                return {
-                    "error": "wake_days must be daily, weekdays, or weekends",
-                }, 400
-            current_user.cfg_wake_days = wd
 
         has_guardrail_min = "guardrail_temp_f_min" in payload
         has_guardrail_max = "guardrail_temp_f_max" in payload
@@ -119,22 +121,22 @@ def user_config():
                 payload.get("guardrail_temp_f_min")
             )
             if guardrail_f_min is None:
-                return {"error": "guardrail_temp_f_min invalid"}, 400
+                return {
+                    "error": "guardrail_temp_f_min must be a number",
+                }, 400
             current_user.cfg_guardrail_temp_f_min = guardrail_f_min
         if has_guardrail_max:
             guardrail_f_max = parse_optional_float(
                 payload.get("guardrail_temp_f_max")
             )
             if guardrail_f_max is None:
-                return {"error": "guardrail_temp_f_max invalid"}, 400
+                return {
+                    "error": "guardrail_temp_f_max must be a number",
+                }, 400
             current_user.cfg_guardrail_temp_f_max = guardrail_f_max
 
-        eff_g_min = (
-            current_user.cfg_guardrail_temp_f_min or 60.0
-        )
-        eff_g_max = (
-            current_user.cfg_guardrail_temp_f_max or 75.0
-        )
+        eff_g_min = current_user.cfg_guardrail_temp_f_min or 60.0
+        eff_g_max = current_user.cfg_guardrail_temp_f_max or 75.0
         if eff_g_min >= eff_g_max:
             return {"error": "guardrail_temp_f_min must be below max"}, 400
         if eff_g_min < 40 or eff_g_max > 110:
@@ -156,12 +158,20 @@ def user_config():
                 payload.get("optimal_band_f_max")
             )
             if optimal_f_min is None or optimal_f_max is None:
-                return {"error": "optimal band values invalid"}, 400
+                return {
+                    "error": (
+                        "optimal_band_f_min and optimal_band_f_max "
+                        "must be numbers"
+                    ),
+                }, 400
             if optimal_f_min >= optimal_f_max:
                 return {"error": "optimal_band_f_min must be below max"}, 400
             if optimal_f_min < eff_g_min or optimal_f_max > eff_g_max:
                 return {
-                    "error": "optimal band must lie within absolute guardrails",
+                    "error": (
+                        "optimal band must lie within absolute "
+                        "guardrails"
+                    ),
                 }, 400
             current_user.cfg_optimal_band_f_min = optimal_f_min
             current_user.cfg_optimal_band_f_max = optimal_f_max
@@ -181,7 +191,6 @@ def user_config():
         "status": "saved",
         "config": {
             "wake_time": current_user.cfg_wake_time,
-            "wake_days": current_user.cfg_wake_days,
             "guardrail_temp_f_min": (
                 current_user.cfg_guardrail_temp_f_min or 60.0
             ),
@@ -201,9 +210,10 @@ def user_config():
     }, 200
 
 
-@bp.route('/subjective-sleep-review/status', methods=['GET'])
+@bp.route("/subjective-sleep-review/status", methods=["GET"])
 @login_required
 def subjective_sleep_review_status():
+    # Frontend calls this to decide whether today's review is already filled.
     now_utc = get_current_utc_time()
     target = subjective_review_target_date(now_utc)
     row = SubjectiveSleepReview.query.filter_by(
@@ -217,9 +227,11 @@ def subjective_sleep_review_status():
     }, 200
 
 
-@bp.route('/subjective-sleep-review', methods=['POST'])
+@bp.route("/subjective-sleep-review", methods=["POST"])
 @login_required
 def subjective_sleep_review_save():
+    # Save or update one daily subjective review row.
+    # If a related scored session exists, bind and log mismatch signals.
     try:
         payload = SubjectiveSleepReviewIn.model_validate(
             request.get_json(silent=True) or {}
@@ -228,7 +240,9 @@ def subjective_sleep_review_save():
         return {"error": "Invalid request body", "details": exc.errors()}, 400
 
     now_utc = get_current_utc_time()
-    session_date = payload.session_date or subjective_review_target_date(now_utc)
+    session_date = payload.session_date or subjective_review_target_date(
+        now_utc
+    )
     notes_str = (
         payload.notes.strip()
         if payload.notes is not None and payload.notes.strip()
@@ -268,7 +282,10 @@ def subjective_sleep_review_save():
         update_optimal_band(current_user, session_date)
     except Exception:
         current_app.logger.exception(
-            "update_optimal_band failed after subjective review user=%s date=%s",
+            (
+                "update_optimal_band failed after subjective review "
+                "user=%s date=%s"
+            ),
             current_user.id,
             session_date.isoformat(),
         )
@@ -282,17 +299,20 @@ def subjective_sleep_review_save():
     return out, 200
 
 
-@bp.route('/subjective-sleep-review/history', methods=['GET'])
+@bp.route("/subjective-sleep-review/history", methods=["GET"])
 @login_required
 def subjective_sleep_review_history():
-    limit_raw = request.args.get("limit", "40")
+    # Return historical subjective reviews with optional day window.
+    limit_raw = request.args.get(
+        "limit", str(SUBJECTIVE_HISTORY_LIMIT_DEFAULT)
+    )
     try:
         limit = int(limit_raw)
     except ValueError:
         return {"error": "limit must be a positive integer"}, 400
     if limit <= 0:
         return {"error": "limit must be a positive integer"}, 400
-    limit = min(limit, 120)
+    limit = min(limit, SUBJECTIVE_HISTORY_LIMIT_MAX)
 
     days_raw = request.args.get("days")
     start_cutoff = None
@@ -301,9 +321,15 @@ def subjective_sleep_review_history():
             days_win = int(days_raw)
         except ValueError:
             return {"error": "days must be a positive integer"}, 400
-        if days_win < 1 or days_win > 90:
-            return {"error": "days must be between 1 and 90"}, 400
-        start_cutoff = get_current_utc_time().date() - timedelta(days=days_win - 1)
+        if days_win < 1 or days_win > SUBJECTIVE_HISTORY_DAYS_MAX:
+            return {
+                "error": (
+                    f"days must be between 1 and {SUBJECTIVE_HISTORY_DAYS_MAX}"
+                ),
+            }, 400
+        start_cutoff = get_current_utc_time().date() - timedelta(
+            days=days_win - 1
+        )
 
     q = SubjectiveSleepReview.query.filter_by(user_id=current_user.id)
     if start_cutoff is not None:
@@ -317,20 +343,24 @@ def subjective_sleep_review_history():
     return {
         "days_window": days_raw,
         "count": len(rows),
-        "reviews": [serialize_subjective_sleep_review_history_entry(r) for r in rows],
+        "reviews": [
+            serialize_subjective_sleep_review_history_entry(r) for r in rows
+        ],
     }, 200
 
+
 # dashboard polling endpoint
-@bp.route('/latest-readings')
+@bp.route("/latest-readings")
 @login_required
 def latest_readings():
-    # merge latest env + biometric values for live cards
+    # Latest merged env + biometric values for dashboard cards.
     return build_latest_live_readings_payload(current_user.id), 200
 
 
 @bp.route("/sleep-coach", methods=["POST"])
 @login_required
 def api_sleep_coach():
+    # Sleep coach flow: collect context, ask model, return markdown.
     payload = request.get_json(silent=True) or {}
     user_q = (
         payload.get("query")
@@ -341,7 +371,8 @@ def api_sleep_coach():
     user_q = str(user_q).strip()
     if not user_q:
         msg = (
-            'JSON body must include text, e.g. {"query": "How can I sleep better?"}'
+            'JSON body must include text, e.g. {"query": '
+            '"How can I sleep better?"}'
         )
         return {"error": msg}, 400
 
@@ -350,36 +381,45 @@ def api_sleep_coach():
         return {"error": "OPENAI_API_KEY is not set"}, 503
 
     anonymized_bundle = readings_context_anonymized_for_llm(
-        days=5, limit=900, llm_budget_rows=450, user_id=current_user.id,
+        days=5,
+        limit=900,
+        llm_budget_rows=450,
+        user_id=current_user.id,
     )
     coach_model = (
-        (os.getenv("OPENAI_SLEEP_COACH_MODEL") or "gpt-4o-mini").strip()
-        or "gpt-4o-mini"
-    )
-    sys_prompt = (
-        "You are the user's premium sleep coach: calm, authoritative, and brief—similar in "
-        "tone to the Oura app. You answer using only the anonymized bedroom IoT time series "
-        "in the user message below (timestamps and sensor fields: temperature, humidity, air "
-        "quality, noise, light, HR, SpO₂, motion/gyro). There are no PII strings. Ground "
-        "advice in what those signals imply plus sound sleep physiology.\n\n"
-        "Formatting (required): Respond in strict, highly scannable Markdown. Prefer short "
-        "bullet lists (one idea per bullet). Use `##` section headers when helpful, each "
-        "with a concise title and a fitting emoji—for example 🌬️ Air quality, 🫀 Vitals, "
-        "💡 Environment (pick emojis that match the section).\n\n"
-        "Tone and content rules:\n"
-        "- Never open with robotic meta-phrases such as \"Based on the provided readings\" "
-        "or \"Based on the data\"; start like a coach speaking to the user.\n"
-        "- Do not apologize, hedge about gaps, or mention missing/absent/unavailable sensors "
-        "or values. Silently analyze only what appears in the JSON; skip topics with no usable "
-        "values.\n"
-        "- Give practical sleep-hygiene and environment tweaks aligned with the data.\n"
-        "- Do not invent medical diagnoses or replace a clinician; if something is "
-        "concerning, state it succinctly as a reason to seek professional advice."
-    )
+        os.getenv("OPENAI_SLEEP_COACH_MODEL") or "gpt-4o-mini"
+    ).strip() or "gpt-4o-mini"
+    sys_prompt = """You are the user's sleep coach: calm, direct, and brief.
+Use a tone similar to the Oura app.
+You answer using only the anonymized bedroom IoT time series in the
+user message below (timestamps and sensor fields: temperature, humidity,
+air quality, noise, light, HR, SpO₂, motion/gyro). There are no PII
+strings. Ground advice in what those signals imply plus sound sleep
+physiology.
+
+Formatting (required): Use clear Markdown. Prefer short bullet lists
+(one idea per bullet). Use section headers when helpful, each with a
+short title and fitting emoji (for example 🌬️ Air quality, 🫀 Vitals,
+💡 Environment).
+
+Tone and content rules:
+- Start like a coach speaking to the user.
+- Do not apologize, hedge about gaps, or mention missing/unavailable
+  sensors or values.
+- Silently analyze only what appears in the JSON and skip topics with no
+  usable values.
+- Give practical sleep-hygiene and environment tweaks aligned with the data.
+- Do not invent medical diagnoses or replace a clinician. If something
+  is concerning, say it succinctly as a reason to seek professional
+  advice."""
     serialized_ctx = json.dumps(anonymized_bundle)
-    max_ctx_chars = min(90_000, int(os.getenv("SLEEP_COACH_CONTEXT_CHARS", "90000")))
+    max_ctx_chars = min(
+        90_000, int(os.getenv("SLEEP_COACH_CONTEXT_CHARS", "90000"))
+    )
     if len(serialized_ctx) > max_ctx_chars:
-        serialized_ctx = serialized_ctx[:max_ctx_chars] + "…truncated-for-token-cap"
+        serialized_ctx = (
+            serialized_ctx[:max_ctx_chars] + "…truncated-for-token-cap"
+        )
 
     user_block = (
         "Anonymized readings JSON (possibly truncated):\n"
@@ -398,9 +438,7 @@ def api_sleep_coach():
                 {"role": "user", "content": user_block},
             ],
         )
-        recommendation = (
-            completion.choices[0].message.content or ""
-        ).strip()
+        recommendation = (completion.choices[0].message.content or "").strip()
         if not recommendation:
             return {"error": "Model returned empty text"}, 502
     except Exception as exc:
@@ -414,6 +452,7 @@ def api_sleep_coach():
 
 
 def _serialize_sleep_session_score(row):
+    # Format one session row for frontend charts/cards.
     if row is None:
         return None
     wake_day = (
@@ -432,18 +471,19 @@ def _serialize_sleep_session_score(row):
         "spo2_drop_count": row.spo2_drop_count,
         "noise_spike_count": row.noise_spike_count,
         "disturbance_score": row.disturbance_score,
-        "environment_stability_score": row.environment_stability_score,
         "sample_count": row.sample_count,
         "calculated_at": (
             utc_isoformat_z(row.calculated_at)
-            if row.calculated_at is not None else None
+            if row.calculated_at is not None
+            else None
         ),
     }
 
 
-@bp.route('/sleep-readiness/latest')
+@bp.route("/sleep-readiness/latest")
 @login_required
 def sleep_readiness_latest():
+    # Latest scored completed session.
     latest_score = (
         SleepSession.query.filter(
             SleepSession.user_id == current_user.id,
@@ -458,17 +498,18 @@ def sleep_readiness_latest():
     return {"score": _serialize_sleep_session_score(latest_score)}, 200
 
 
-@bp.route('/sleep-readiness/history')
+@bp.route("/sleep-readiness/history")
 @login_required
 def sleep_readiness_history():
-    limit_raw = request.args.get("limit", "14")
+    # History for readiness trend chart.
+    limit_raw = request.args.get("limit", str(READINESS_HISTORY_LIMIT_DEFAULT))
     try:
         limit = int(limit_raw)
     except ValueError:
         return {"error": "limit must be a positive integer"}, 400
     if limit <= 0:
         return {"error": "limit must be a positive integer"}, 400
-    limit = min(limit, 90)
+    limit = min(limit, READINESS_HISTORY_LIMIT_MAX)
 
     rows = (
         SleepSession.query.filter(
@@ -486,40 +527,72 @@ def sleep_readiness_history():
     }, 200
 
 
-@bp.route('/sleep-session/list')
+@bp.route("/sleep-session/list")
 @login_required
 def sleep_session_list():
-    # recent sessions for single-night picker
+    # Build the night picker list.
+    # Dedupe by wake/start day so duplicate rows do not show up.
     consciousness, active_sid = get_sleep_session_resolution_context()
-    rows = (
+    raw_rows = (
         SleepSession.query.filter(SleepSession.user_id == current_user.id)
         .order_by(SleepSession.started_at.desc())
-        .limit(50)
+        .limit(SLEEP_SESSION_LIST_QUERY_LIMIT)
         .all()
     )
+    rows = dedupe_sleep_sessions_for_picker(
+        raw_rows,
+        max_out=SLEEP_SESSION_LIST_MAX_OUT,
+    )
+
     items = []
     for s in rows:
+        # Badge type used by the night picker UI.
         ongoing = s.ended_at is None
-        items.append({
-            "id": s.id,
-            "wake_date_utc": _wake_calendar_date(s).isoformat(),
-            "display_label": _format_sleep_session_display_label(s),
-            "started_at": utc_isoformat_z(s.started_at),
-            "ended_at": utc_isoformat_z(s.ended_at) if s.ended_at else None,
-            "ongoing": ongoing,
-            "fsm_active": bool(
-                ongoing
-                and active_sid is not None
-                and s.id == active_sid
-                and consciousness == "ASLEEP"
-            ),
-        })
+        fsm_active = bool(
+            ongoing
+            and active_sid is not None
+            and s.id == active_sid
+            and consciousness == "ASLEEP"
+        )
+        if not ongoing:
+            ui_kind = "completed"
+        elif fsm_active:
+            ui_kind = "live_sleep"
+        else:
+            # Open row, but not currently live ASLEEP in the FSM.
+            ui_kind = "open_idle"
+        items.append(
+            {
+                "id": s.id,
+                "wake_date_utc": _wake_calendar_date(s).isoformat(),
+                "display_label": _format_sleep_session_display_label(s),
+                "started_at": utc_isoformat_z(s.started_at),
+                "ended_at": utc_isoformat_z(s.ended_at)
+                if s.ended_at
+                else None,
+                "ongoing": ongoing,
+                "fsm_active": fsm_active,
+                "session_ui_kind": ui_kind,
+            }
+        )
+
+    def _session_list_rank(entry: Dict[str, Any]) -> tuple:
+        kind = entry.get("session_ui_kind")
+        sid = int(entry.get("id") or 0)
+        if kind == "live_sleep":
+            return (0, -sid)
+        if kind == "open_idle":
+            return (1, -sid)
+        return (2, -sid)
+
+    items.sort(key=_session_list_rank)
     return {"sessions": items}, 200
 
 
-@bp.route('/sleep-session/night-readings')
+@bp.route("/sleep-session/night-readings")
 @login_required
 def sleep_session_night_readings():
+    # Return all points for one selected night picker session.
     sess, param_err = resolve_sleep_session_for_night_chart(
         session_id_param=request.args.get("session_id"),
         night_param=request.args.get("night"),
@@ -529,7 +602,10 @@ def sleep_session_night_readings():
         code = 404 if param_err == "Session not found." else 400
         return {"error": param_err}, code
     if sess is None:
-        return {"error": "No sleep sessions on record.", "session_id": None}, 404
+        return {
+            "error": "No sleep sessions on record.",
+            "session_id": None,
+        }, 404
 
     window_start = to_utc_datetime(sess.started_at)
     window_end = sess.ended_at if sess.ended_at else get_current_utc_time()
@@ -558,10 +634,10 @@ def sleep_session_night_readings():
     }, 200
 
 
-@bp.route('/sleep-readiness/weekly-summary')
+@bp.route("/sleep-readiness/weekly-summary")
 @login_required
 def sleep_readiness_weekly_summary():
-    # last 7 completed nights + nightly averages per metric
+    # Last 7 completed nights and weekly means.
     rows_chrono = (
         SleepSession.query.filter(
             SleepSession.user_id == current_user.id,
@@ -578,20 +654,25 @@ def sleep_readiness_weekly_summary():
     for hit in rows_chrono:
         wd = to_utc_datetime(hit.ended_at).date().isoformat()
         avgs = _session_sensor_nightly_averages(hit)
-        days_out.append({
-            "score_date": wd,
-            "session_id": hit.id,
-            "display_label": _format_sleep_session_display_label(hit),
-            "readiness_score": round(float(hit.readiness_score), 2),
-            "avg_prv_ms": (
-                round(float(hit.avg_prv_ms), 2)
-                if hit.avg_prv_ms is not None else None
-            ),
-            **avgs,
-        })
+        days_out.append(
+            {
+                "score_date": wd,
+                "session_id": hit.id,
+                "display_label": _format_sleep_session_display_label(hit),
+                "readiness_score": round(float(hit.readiness_score), 2),
+                "avg_prv_ms": (
+                    round(float(hit.avg_prv_ms), 2)
+                    if hit.avg_prv_ms is not None
+                    else None
+                ),
+                **avgs,
+            }
+        )
 
     if rows_chrono:
-        range_start = to_utc_datetime(rows_chrono[0].ended_at).date().isoformat()
+        range_start = (
+            to_utc_datetime(rows_chrono[0].ended_at).date().isoformat()
+        )
         range_end = (
             to_utc_datetime(rows_chrono[-1].ended_at).date().isoformat()
         )
@@ -633,9 +714,11 @@ def sleep_readiness_weekly_summary():
     }, 200
 
 
-@bp.route('/simulated-room', methods=['GET', 'POST'])
+@bp.route("/simulated-room", methods=["GET", "POST"])
 def simulated_room():
-    if request.method == 'POST':
+    # GET returns current room state.
+    # POST manually sets hardware state in demo mode.
+    if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         allowed_keys = {
             "cooling",
@@ -660,9 +743,7 @@ def simulated_room():
                 if key in payload:
                     raw_value = payload[key]
                     if not isinstance(raw_value, bool):
-                        return {
-                            "error": f"'{key}' must be boolean"
-                        }, 400
+                        return {"error": f"'{key}' must be boolean"}, 400
                     hardware[key] = raw_value
                     updates[key] = raw_value
             simulated_room_state["simulated_hardware"] = hardware
@@ -703,10 +784,10 @@ def simulated_room():
     return response_payload, 200
 
 
-@bp.route('/dev/simulation', methods=['POST'])
+@bp.route("/dev/simulation", methods=["POST"])
 @login_required
 def dev_simulation_toggle():
-    # dev/demo toggle endpoint
+    # Demo mode scenario toggles for Control page buttons.
     payload = request.get_json(silent=True) or {}
     allowed_flags = frozenset(
         {
@@ -758,7 +839,10 @@ def dev_simulation_toggle():
         extra = set(payload.keys()) - {"scenario"}
         if extra:
             return {
-                "error": "Use either 'scenario' or individual force_* keys, not both",
+                "error": (
+                    "Use either 'scenario' or individual force_* keys, "
+                    "not both"
+                ),
                 "unexpected_keys": sorted(extra),
             }, 400
         with sim_room_lock:
@@ -820,8 +904,9 @@ def dev_simulation_toggle():
     return out, 200
 
 
-@bp.route('/simulated-room/changes')
+@bp.route("/simulated-room/changes")
 def simulated_room_changes():
+    # Polling feed for recent room events.
     since_param = request.args.get("since")
     cursor_param = request.args.get("cursor")
     limit_param = request.args.get("limit")
@@ -838,9 +923,7 @@ def simulated_room_changes():
             else:
                 since_dt = since_dt.astimezone(timezone.utc)
         except ValueError:
-            return {
-                "error": "Invalid 'since' format. Use ISO-8601 datetime."
-            }, 400
+            return {"error": "Invalid 'since'. Use ISO-8601 datetime."}, 400
 
     if cursor_param:
         try:
@@ -849,7 +932,7 @@ def simulated_room_changes():
                 raise ValueError
         except ValueError:
             return {
-                "error": "Invalid 'cursor'. Use a non-negative integer."
+                "error": "Invalid 'cursor'. Must be a non-negative integer."
             }, 400
 
     if limit_param:
@@ -860,7 +943,7 @@ def simulated_room_changes():
             limit = min(limit, 50)
         except ValueError:
             return {
-                "error": "Invalid 'limit'. Use a positive integer."
+                "error": "Invalid 'limit'. Must be a positive integer."
             }, 400
 
     with sim_room_lock:
@@ -900,4 +983,3 @@ def simulated_room_changes():
         "has_more": has_more,
         "changes": paged_changes,
     }, 200
-

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""State-machine logic for sleep detection and daily adaptation.
+
+This module owns transitions between AWAKE and ASLEEP and
+coordinates updates that depend on recent readings.
+"""
+
 import threading
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,7 +25,13 @@ from utils import get_current_utc_time, to_float_or_none
 
 
 def _utc_calendar_date(dt: datetime) -> date:
+    # Utility: convert any datetime to UTC calendar date.
     return to_utc_datetime(dt).date()
+
+
+def _as_utc(dt: datetime) -> datetime:
+    # Utility: normalize datetime to UTC timezone-aware object.
+    return to_utc_datetime(dt)
 
 
 _DEFAULT_INGEST_UID_CACHE: Optional[int] = None
@@ -27,6 +39,7 @@ _DEFAULT_INGEST_UID_LOADED = False
 
 
 def default_ingest_user_id() -> Optional[int]:
+    # Resolve default user once, then reuse cached id for ingest routes.
     global _DEFAULT_INGEST_UID_CACHE, _DEFAULT_INGEST_UID_LOADED
     if _DEFAULT_INGEST_UID_LOADED:
         return _DEFAULT_INGEST_UID_CACHE
@@ -40,6 +53,7 @@ def _latest_sleep_session_ended_on(
     cal_date: date,
     scoped_user_id: Optional[int] = None,
 ) -> Optional[SleepSession]:
+    # Find latest ended session for a given UTC date.
     q = SleepSession.query.filter(SleepSession.ended_at.isnot(None)).order_by(
         SleepSession.ended_at.desc(),
     )
@@ -47,7 +61,10 @@ def _latest_sleep_session_ended_on(
         q = q.filter(SleepSession.user_id == scoped_user_id)
     candidates = q.all()
     for s in candidates:
-        if s.ended_at is not None and _utc_calendar_date(s.ended_at) == cal_date:
+        if (
+            s.ended_at is not None
+            and _utc_calendar_date(s.ended_at) == cal_date
+        ):
             return s
     return None
 
@@ -61,14 +78,13 @@ def celsius_mean_between(
     window_start_utc = _as_utc(window_start_utc)
     window_end_utc = _as_utc(window_end_utc)
 
-    rq = (
-        Reading.query.filter(Reading.timestamp >= window_start_utc)
-        .filter(Reading.timestamp <= window_end_utc)
+    rq = Reading.query.filter(Reading.timestamp >= window_start_utc).filter(
+        Reading.timestamp <= window_end_utc
     )
     if user_id is not None:
         rq = rq.filter(Reading.user_id == user_id)
     readings = rq.all()
-    vals = [_to_float(r.temperature) for r in readings]
+    vals = [to_float_or_none(r.temperature) for r in readings]
     vals = [v for v in vals if v is not None]
     if not vals:
         return None
@@ -139,7 +155,9 @@ def _clamp_band_to_guardrails(
     gmin: float,
     gmax: float,
 ) -> Tuple[float, float]:
-    half_width = max(0.25, min(half_width, max((gmax - gmin) / 2.0 - 0.05, 0.25)))
+    half_width = max(
+        0.25, min(half_width, max((gmax - gmin) / 2.0 - 0.05, 0.25))
+    )
     lo = center - half_width
     hi = center + half_width
     lo = max(gmin, min(lo, gmax - 2 * half_width))
@@ -193,7 +211,10 @@ def update_optimal_band(user: User, score_date: date) -> Optional[dict]:
         t_center_new = t_center_old
 
     new_lo, new_hi = _clamp_band_to_guardrails(
-        t_center_new, half_w_new, gmin, gmax,
+        t_center_new,
+        half_w_new,
+        gmin,
+        gmax,
     )
 
     user.cfg_optimal_band_f_min = round(new_lo, 2)
@@ -206,9 +227,13 @@ def update_optimal_band(user: User, score_date: date) -> Optional[dict]:
         "score_date": score_date.isoformat(),
         "alpha": alpha,
         "sleep_readiness": (
-            readiness_value if session_row.readiness_score is not None else None
+            readiness_value
+            if session_row.readiness_score is not None
+            else None
         ),
-        "night_mean_fahrenheit": round(night_f, 3) if night_f is not None else None,
+        "night_mean_fahrenheit": round(night_f, 3)
+        if night_f is not None
+        else None,
         "morning_rating_used": rating,
         "width_multiplier": width_mult,
         "optimal_band_f_min": user.cfg_optimal_band_f_min,
@@ -240,6 +265,7 @@ BIOMETRIC_STALE_SECONDS = config.BIOMETRIC_STALE_SECONDS
 
 
 def get_user_sleep_consciousness_state() -> str:
+    # Thread-safe getter for current in-memory state.
     with sleep_state_lock:
         return current_user_state
 
@@ -251,11 +277,14 @@ def get_sleep_session_resolution_context() -> Tuple[str, Optional[int]]:
 
 
 def snapshot_sleep_tracking() -> Dict[str, Any]:
+    # Standardized view of in-memory tracker for API/debug responses.
     with sleep_state_lock:
         return {
             "current_user_state": current_user_state,
             "consciousness_state": current_user_state,
-            "sleep_session_started_at": utc_isoformat_z(sleep_session_start_time),
+            "sleep_session_started_at": utc_isoformat_z(
+                sleep_session_start_time
+            ),
             "session_start_time": utc_isoformat_z(sleep_session_start_time),
             "sleep_session_id": active_sleep_session_id,
             "session_end_time": None,
@@ -266,12 +295,7 @@ def _reading_has_positive_vitals(row: Reading) -> bool:
     # True when both HR and SpO2 are present and > 0.
     hr = to_float_or_none(row.heart_rate)
     spo2 = to_float_or_none(row.spo2)
-    return (
-        hr is not None
-        and spo2 is not None
-        and hr > 0.0
-        and spo2 > 0.0
-    )
+    return hr is not None and spo2 is not None and hr > 0.0 and spo2 > 0.0
 
 
 def _latest_positive_vitals_timestamp() -> Optional[datetime]:
@@ -302,7 +326,10 @@ def _biometric_stream_status() -> Tuple[bool, Optional[datetime]]:
 
 def evaluate_sleep_state(app) -> Dict[str, Any]:
     # Keep AWAKE/ASLEEP state in sync with recent biometric stream.
-    global current_user_state, sleep_session_start_time, active_sleep_session_id
+    global \
+        current_user_state, \
+        sleep_session_start_time, \
+        active_sleep_session_id
 
     finalized_id: Optional[int] = None
     new_session_at: Optional[datetime] = None
@@ -312,11 +339,13 @@ def evaluate_sleep_state(app) -> Dict[str, Any]:
 
         with sleep_state_lock:
             if active:
+                # Transition AWAKE -> ASLEEP.
                 if current_user_state != "ASLEEP":
                     new_session_at = vitals_ts or get_current_utc_time()
                     sleep_session_start_time = new_session_at
                     current_user_state = "ASLEEP"
             else:
+                # Transition ASLEEP -> AWAKE and mark previous session.
                 if (
                     current_user_state == "ASLEEP"
                     and active_sleep_session_id is not None
@@ -327,6 +356,7 @@ def evaluate_sleep_state(app) -> Dict[str, Any]:
                 active_sleep_session_id = None
 
         if new_session_at is not None:
+            # Persist newly opened session.
             sess = SleepSession(
                 started_at=new_session_at,
                 user_id=default_ingest_user_id(),
@@ -337,6 +367,7 @@ def evaluate_sleep_state(app) -> Dict[str, Any]:
                 active_sleep_session_id = sess.id
 
         if finalized_id is not None:
+            # Close and score the finished session.
             finalize_sleep_session_after_wake(finalized_id)
 
     return snapshot_sleep_tracking()
@@ -350,7 +381,9 @@ MICRO_AROUSAL_AFTER_SPIKE_SECONDS = config.MICRO_AROUSAL_AFTER_SPIKE_SECONDS
 MICRO_AROUSAL_PRV_DROP_FRAC = config.MICRO_AROUSAL_PRV_DROP_FRAC
 
 
-def prv_ms_between_hr_samples(prev_hr: Optional[float], curr_hr: Optional[float]) -> Optional[float]:
+def prv_ms_between_hr_samples(
+    prev_hr: Optional[float], curr_hr: Optional[float]
+) -> Optional[float]:
     # Simple beat-to-beat PRV proxy (ms).
     if prev_hr is None or curr_hr is None:
         return None
@@ -378,6 +411,7 @@ def _median_nonneg(vals: List[float]) -> Optional[float]:
 
 
 def default_micro_arousal_ctx() -> Dict[str, Any]:
+    # Baseline state for spike/drop detector.
     return {
         "prv_ring": [],
         "prev_hr": None,
@@ -433,8 +467,7 @@ def micro_arousal_tick(
             ctx["pending_spike_db"] = None
             ctx["median_prv_snapshot_ms"] = None
         elif (
-            elapsed <= MICRO_AROUSAL_AFTER_SPIKE_SECONDS
-            and prv_ms is not None
+            elapsed <= MICRO_AROUSAL_AFTER_SPIKE_SECONDS and prv_ms is not None
         ):
             median_snap = ctx.get("median_prv_snapshot_ms")
             if median_snap is not None:
@@ -461,7 +494,9 @@ def micro_arousal_tick(
                                 f"(threshold {thresh:.1f} dB)"
                             )
                         else:
-                            label = f"Micro-arousal — noise {spike_noise:.1f} dB"
+                            label = (
+                                f"Micro-arousal — noise {spike_noise:.1f} dB"
+                            )
                         label = label[:158]
                         created = MicroArousalEvent(
                             spike_noise_db=spike_noise,

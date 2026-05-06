@@ -2,6 +2,12 @@ import threading
 import time
 from datetime import timedelta
 
+"""Room simulation and actuator intent logic.
+
+This file keeps the control-center simulation state in one place,
+including background workers that refresh derived room signals.
+"""
+
 from sqlalchemy import or_
 
 import config
@@ -27,12 +33,14 @@ _flask_app = None
 
 
 def init_room_sim(app):
+    # Attach Flask app reference so worker threads can use app context safely.
     global _flask_app
     _flask_app = app
 
 
 total_records_cache = None
 sim_room_lock = threading.Lock()
+# Shared mutable state for simulation endpoints and worker threads.
 simulated_room_state = {
     "room_id": "bedroom-sim-01",
     "state": "initializing",
@@ -73,15 +81,30 @@ simulated_room_state = {
     },
     # Baseline defaults used by control loop.
     "baselines": {
-        "temperature_c": (config.SCI_TEMP_BAND_C_MIN + config.SCI_TEMP_BAND_C_MAX) / 2.0,
-        "temperature_band_c": {"min": config.SCI_TEMP_BAND_C_MIN, "max": config.SCI_TEMP_BAND_C_MAX},
-        "humidity_percent": (config.SCI_HUMIDITY_PCT_MIN + config.SCI_HUMIDITY_PCT_MAX) / 2.0,
-        "humidity_band_pct": {"min": config.SCI_HUMIDITY_PCT_MIN, "max": config.SCI_HUMIDITY_PCT_MAX},
+        "temperature_c": (
+            config.SCI_TEMP_BAND_C_MIN + config.SCI_TEMP_BAND_C_MAX
+        )
+        / 2.0,
+        "temperature_band_c": {
+            "min": config.SCI_TEMP_BAND_C_MIN,
+            "max": config.SCI_TEMP_BAND_C_MAX,
+        },
+        "humidity_percent": (
+            config.SCI_HUMIDITY_PCT_MIN + config.SCI_HUMIDITY_PCT_MAX
+        )
+        / 2.0,
+        "humidity_band_pct": {
+            "min": config.SCI_HUMIDITY_PCT_MIN,
+            "max": config.SCI_HUMIDITY_PCT_MAX,
+        },
         "ambient_noise_db": None,
         "voc_index": None,
         "heart_rate_bpm": None,
         "ambient_light_lux": 5.0,
-        "ambient_light_lux_band": {"min": config.SCI_LUX_MIN, "max": config.SCI_LUX_MAX},
+        "ambient_light_lux_band": {
+            "min": config.SCI_LUX_MIN,
+            "max": config.SCI_LUX_MAX,
+        },
     },
     "last_transition": None,
     "recent_changes": [],
@@ -115,6 +138,7 @@ def session_mean_heart_rate_bpm(open_session_pk):
 
 
 def compute_sunrise_sequence(now_utc, wake_time_str):
+    # Build a simple sunrise ramp model for the lighting card.
     sunrise_window_minutes = 30
     if not wake_time_str:
         wake_time_str = "07:00"
@@ -168,6 +192,7 @@ def compute_sunrise_sequence(now_utc, wake_time_str):
 
 
 def append_room_change(event_type, reason, payload):
+    # Keep a small rolling event log for control page polling.
     event = {
         "timestamp": utc_isoformat_z(get_current_utc_time()),
         "event_type": event_type,
@@ -175,7 +200,9 @@ def append_room_change(event_type, reason, payload):
         "payload": payload,
     }
     simulated_room_state["recent_changes"].append(event)
-    simulated_room_state["recent_changes"] = simulated_room_state["recent_changes"][-20:]
+    simulated_room_state["recent_changes"] = simulated_room_state[
+        "recent_changes"
+    ][-20:]
     simulated_room_state["last_transition"] = event["timestamp"]
 
 
@@ -204,6 +231,10 @@ def compute_simulated_hardware(
     fl = ds.get("force_low_temperature") is True
     fv = ds.get("force_voc_spike") is True
 
+    # In demo mode scenarios (except clear), ignore live HVAC/noise rules.
+    # This keeps the dashboard aligned with the selected scenario.
+    dev_scenario_active = any((ft, fn, fl, fv))
+
     if ft:
         out["cooling"] = True
     if fn:
@@ -213,10 +244,10 @@ def compute_simulated_hardware(
     if fv:
         out["air_filtration_high_fan"] = True
 
-    if voc_drift_active:
+    if voc_drift_active and not dev_scenario_active:
         out["air_filtration_high_fan"] = True
 
-    if interventions_ok:
+    if interventions_ok and not dev_scenario_active:
         if temp_above_optimal:
             out["cooling"] = True
         if temp_below_optimal:
@@ -224,7 +255,7 @@ def compute_simulated_hardware(
         if noise_spike or noise_constant_high:
             out["white_noise"] = True
 
-    if biological_cooling and temp_above_optimal:
+    if biological_cooling and temp_above_optimal and not dev_scenario_active:
         out["cooling"] = True
 
     if out["air_filtration_high_fan"]:
@@ -283,14 +314,19 @@ def update_optimal_band_worker():
 
 
 def evaluate_sleep_and_environment():
+    # Main background worker: refresh sleep state and simulated environment.
     while True:
         time.sleep(10)
         with _flask_app.app_context():
             du = default_ingest_user_id()
             rq = Reading.query
             if du is not None:
-                rq = rq.filter(or_(Reading.user_id == du, Reading.user_id.is_(None)))
-            latest = rq.order_by(Reading.timestamp.desc(), Reading.id.desc()).first()
+                rq = rq.filter(
+                    or_(Reading.user_id == du, Reading.user_id.is_(None))
+                )
+            latest = rq.order_by(
+                Reading.timestamp.desc(), Reading.id.desc()
+            ).first()
             if latest is None:
                 continue
 
@@ -328,7 +364,9 @@ def evaluate_sleep_and_environment():
                 voc_display = voc
                 if dev_locked.get("force_low_temperature") is True:
                     if ref_user is not None:
-                        g_min_f = float(ref_user.cfg_guardrail_temp_f_min or 60.0)
+                        g_min_f = float(
+                            ref_user.cfg_guardrail_temp_f_min or 60.0
+                        )
                         g_min_c = (g_min_f - 32.0) * (5.0 / 9.0)
                         temp_display = round(g_min_c - 2.0, 2)
                     else:
@@ -352,7 +390,10 @@ def evaluate_sleep_and_environment():
                 simulated_room_state["sleep_signal_score"] = sleep_signal_score
 
                 baselines = simulated_room_state["baselines"]
-                if baselines.get("ambient_noise_db") is None and noise is not None:
+                if (
+                    baselines.get("ambient_noise_db") is None
+                    and noise is not None
+                ):
                     baselines["ambient_noise_db"] = noise
                 if baselines.get("voc_index") is None and voc is not None:
                     baselines["voc_index"] = voc
@@ -387,12 +428,14 @@ def evaluate_sleep_and_environment():
                 if temp_below_optimal:
                     drift_detected.append("temperature_below_optimal")
                 if (
-                    temp is not None and temp_base is not None
+                    temp is not None
+                    and temp_base is not None
                     and abs(temp - temp_base) > 1.5
                 ):
                     drift_detected.append("temperature_baseline_drift")
                 if (
-                    humid is not None and hum_base is not None
+                    humid is not None
+                    and hum_base is not None
                     and abs(humid - hum_base) > 7.0
                 ):
                     drift_detected.append("humidity")
@@ -402,7 +445,10 @@ def evaluate_sleep_and_environment():
                 noise_constant_high = False
                 if noise is not None:
                     n = float(noise)
-                    if prev_n is not None and (n - float(prev_n)) >= config.NOISE_SPIKE_DELTA_DB:
+                    if (
+                        prev_n is not None
+                        and (n - float(prev_n)) >= config.NOISE_SPIKE_DELTA_DB
+                    ):
                         noise_spike = True
                     if noise_base is not None:
                         nb = float(noise_base)
@@ -413,9 +459,14 @@ def evaluate_sleep_and_environment():
                             or n >= config.NOISE_HIGH_ABSOLUTE_DB
                         )
                         if elevated:
-                            streak = int(
-                                simulated_room_state.get("_noise_high_streak", 0)
-                            ) + 1
+                            streak = (
+                                int(
+                                    simulated_room_state.get(
+                                        "_noise_high_streak", 0
+                                    )
+                                )
+                                + 1
+                            )
                         else:
                             streak = 0
                         simulated_room_state["_noise_high_streak"] = streak
@@ -425,7 +476,9 @@ def evaluate_sleep_and_environment():
                         )
                     else:
                         simulated_room_state["_noise_high_streak"] = 0
-                        noise_constant_high = n >= config.NOISE_HIGH_ABSOLUTE_DB
+                        noise_constant_high = (
+                            n >= config.NOISE_HIGH_ABSOLUTE_DB
+                        )
                 else:
                     simulated_room_state["_noise_high_streak"] = 0
 
@@ -436,7 +489,8 @@ def evaluate_sleep_and_environment():
 
                 # VOC hazard logic (runs regardless of ASLEEP state).
                 voc_abs_alarm = (
-                    voc is not None and float(voc) > config.MQ135_SAFE_INDEX_MAX
+                    voc is not None
+                    and float(voc) > config.MQ135_SAFE_INDEX_MAX
                 )
                 voc_rel_alarm = (
                     voc is not None
@@ -490,7 +544,9 @@ def evaluate_sleep_and_environment():
                         micro_evt.disruption_label,
                         {
                             "spike_noise_db": micro_evt.spike_noise_db,
-                            "prv_median_before_ms": micro_evt.prv_median_before_ms,
+                            "prv_median_before_ms": (
+                                micro_evt.prv_median_before_ms
+                            ),
                             "prv_observed_ms": micro_evt.prv_observed_ms,
                             "prv_drop_ms": micro_evt.prv_drop_ms,
                         },
@@ -498,12 +554,14 @@ def evaluate_sleep_and_environment():
 
                 interventions_ok = asleep
 
-                prev_voc_evt = simulated_room_state.get("_voc_boost_event_prev", False)
+                prev_voc_evt = simulated_room_state.get(
+                    "_voc_boost_event_prev", False
+                )
                 if voc_alarm_active and not prev_voc_evt:
                     append_room_change(
                         "voc_ventilation_boost",
                         (
-                            "VOC / air-quality hazard — air filtration engaged "
+                            "VOC / air-quality hazard; air filtration engaged "
                             "(independent of sleep state)"
                         ),
                         {
@@ -514,7 +572,9 @@ def evaluate_sleep_and_environment():
                             "relative_trigger": voc_rel_alarm,
                         },
                     )
-                simulated_room_state["_voc_boost_event_prev"] = voc_alarm_active
+                simulated_room_state["_voc_boost_event_prev"] = (
+                    voc_alarm_active
+                )
 
                 if interventions_ok:
                     simulated_room_state["state"] = "consciousness_sleep"
@@ -539,19 +599,24 @@ def evaluate_sleep_and_environment():
                             simulated_room_state["hvac"] = {
                                 "mode": "cooling",
                                 "target_temperature_c": round(
-                                    sleep_target_c - drift_cool_margin, 2,
+                                    sleep_target_c - drift_cool_margin,
+                                    2,
                                 ),
                             }
                         elif "temperature_below_optimal" in drift_detected:
                             simulated_room_state["hvac"] = {
                                 "mode": "heating",
                                 "target_temperature_c": round(
-                                    sleep_target_c + drift_cool_margin, 2,
+                                    sleep_target_c + drift_cool_margin,
+                                    2,
                                 ),
                             }
                         append_room_change(
                             "environmental_drift",
-                            "baseline drift interventions (armed only during ASLEEP)",
+                            (
+                                "baseline drift interventions "
+                                "(armed only during ASLEEP)"
+                            ),
                             {
                                 "drift_metrics": drift_detected,
                                 "consciousness_state": consciousness,
@@ -592,7 +657,9 @@ def evaluate_sleep_and_environment():
                         "reason": "voc_air_quality_exception",
                     }
 
-                simulated_room_state["last_drift_detected"] = list(drift_detected)
+                simulated_room_state["last_drift_detected"] = list(
+                    drift_detected
+                )
                 if noise is not None:
                     simulated_room_state["_noise_prev_db"] = float(noise)
 
@@ -600,7 +667,10 @@ def evaluate_sleep_and_environment():
 
 
 def start_background_tasks():
-    global monitor_thread_started, readiness_thread_started, optimal_band_thread_started
+    global \
+        monitor_thread_started, \
+        readiness_thread_started, \
+        optimal_band_thread_started
     if not monitor_thread_started:
         worker = threading.Thread(
             target=evaluate_sleep_and_environment,

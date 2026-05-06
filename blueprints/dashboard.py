@@ -1,4 +1,12 @@
-from flask import Blueprint, current_app, redirect, render_template, request, session, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_login import current_user, login_required
 
 from config import EVENT_LOG_BREACH_LABELS, EVENT_LOG_BREACH_METRICS
@@ -64,7 +72,10 @@ def _admin_event_log_kwargs():
     def _has_valid_breach_query():
         if event_metric not in EVENT_LOG_BREACH_METRICS:
             return False
-        if event_threshold_raw in (None, "") or not str(event_threshold_raw).strip():
+        if (
+            event_threshold_raw in (None, "")
+            or not str(event_threshold_raw).strip()
+        ):
             return False
         return True
 
@@ -73,7 +84,11 @@ def _admin_event_log_kwargs():
         end_date = parse_local_datetime_to_utc(end_datetime_str or None)
 
         thr_clean = str(event_threshold_raw).strip()
-        direction = event_direction if event_direction in ("above", "below") else "below"
+        direction = (
+            event_direction
+            if event_direction in ("above", "below")
+            else "below"
+        )
 
         search_rows = reading.read_search(
             metric=event_metric,
@@ -86,7 +101,8 @@ def _admin_event_log_kwargs():
         lbl = EVENT_LOG_BREACH_LABELS[event_metric]
         event_log_summary = (
             f"{lbl}: values {direction} threshold {thr_clean} "
-            f"(optional local window applied; default scope: last 7 calendar days)"
+            "(optional local window applied; default scope: "
+            "last 7 calendar days)"
         )
         event_metric_highlight = event_metric
         search_results = search_rows if search_rows is not None else []
@@ -214,14 +230,20 @@ def event_log_search():
         session["event_log_error"] = msg
         session["event_metric"] = metric
         session["event_threshold"] = threshold or ""
-        session["event_direction"] = direction if direction in ("above", "below") else "below"
+        session["event_direction"] = (
+            direction if direction in ("above", "below") else "below"
+        )
         session["start_datetime"] = start
         session["end_datetime"] = end
         return redirect(url_for("dashboard.data"))
 
     if metric not in EVENT_LOG_BREACH_METRICS:
         return _reject(
-            "Select one metric: heart rate, SpO₂, ambient noise, air quality index, or raw motion column (gyro / activity)."
+            (
+                "Select one metric: heart rate, SpO₂, ambient noise, "
+                "air quality index, or raw motion column "
+                "(gyro / activity)."
+            )
         )
     if threshold in (None, "") or not str(threshold).strip():
         return _reject("Enter a numeric threshold.")
